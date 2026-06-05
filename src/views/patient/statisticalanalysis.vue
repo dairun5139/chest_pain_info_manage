@@ -334,7 +334,8 @@ fmcToEcgMean: [], fmcToTroponinMean: [], doorToBalloonMean: [], doorToEchoMean: 
       fields.forEach(field => {
         dataByField[field] = jsonData
           .map(item => Number(item[field]))
-          .filter(value => value !== null && value !== 'N/A')
+          // 过滤掉 NaN、0（无效间隔）、负数
+          .filter(value => Number.isFinite(value) && value > 0)
       })
 
       const statsByField = {}
@@ -381,12 +382,12 @@ fmcToEcgMean: [], fmcToTroponinMean: [], doorToBalloonMean: [], doorToEchoMean: 
       ]
       const meansByField = {}
       fields.forEach(field => {
-        const data = jsonData.map(item => Number(item[field])).filter(v => Number.isFinite(v))
+        const data = jsonData.map(item => Number(item[field])).filter(v => Number.isFinite(v) && v > 0)
         if (data.length === 0) { meansByField[field] = []; return }
         const partSize = Math.ceil(data.length / (this.NoOfMonths || 1))
         const parts = []
         for (let i = 0; i < this.NoOfMonths; i++) {
-          const chunk = data.slice(i * partSize, (i + 1) * partSize).filter(v => Number.isFinite(v))
+          const chunk = data.slice(i * partSize, (i + 1) * partSize).filter(v => Number.isFinite(v) && v > 0)
           parts.push(chunk)
         }
         meansByField[field] = parts.map(arr => {
@@ -401,6 +402,7 @@ fmcToEcgMean: [], fmcToTroponinMean: [], doorToBalloonMean: [], doorToEchoMean: 
     async getPatientListData() {
       try { this.loadingCount++; } catch (_) { this.loadingCount = (this.loadingCount||0)+1; }
 
+      try {
       const id = this.$store.getters.id
       const token = getToken()
       //console.log('token:' + token)
@@ -445,9 +447,11 @@ fmcToEcgMean: [], fmcToTroponinMean: [], doorToBalloonMean: [], doorToEchoMean: 
       } else {
         this.loading = false
       }
-
-
-      try { this.loadingCount = Math.max(0, (this.loadingCount||1) - 1); } catch (_) {}
+      } catch (e) {
+        console.error('统计分析患者列表加载失败:', e)
+      } finally {
+        try { this.loadingCount = Math.max(0, (this.loadingCount||1) - 1); } catch (_) {}
+      }
 },
     generatePieData(diseaseList) {
       // 1. 统计每类疾病的数量
@@ -626,6 +630,7 @@ formatDate(dateString) {
     async getPatientData() {
       try { this.loadingCount++; } catch (_) { this.loadingCount = (this.loadingCount||0)+1; }
 
+      try {
       this.Months = this.getMonthsBetween(this.startDate, this.endDate);
       this.NoOfMonths = this.Months.length || 1;
 
@@ -776,7 +781,11 @@ formatDate(dateString) {
         // this.loading = false
       }
 
-      try { this.loadingCount = Math.max(0, (this.loadingCount||1) - 1); } catch (_) {}
+      } catch (e) {
+        console.error('统计分析数据加载失败:', e)
+      } finally {
+        try { this.loadingCount = Math.max(0, (this.loadingCount||1) - 1); } catch (_) {}
+      }
 },
 // 工具函数：获取两个日期之间的所有月份
     getMonthsBetween(startDateStr, endDateStr) {

@@ -291,7 +291,11 @@ export default {
         if (qid) eff = Number(qid) || null
       } catch (_) {}
       if (!eff && this.$store && this.$store.getters) eff = Number(this.$store.getters.patientId) || null
-      if (eff) this.syncIdToAll(eff)
+      if (eff) {
+        this.syncIdToAll(eff)
+        // 强制更新 patient.id 确保 getPatientData 用新 id 发请求
+        if (this.patient) this.patient.id = eff
+      }
       if (this.patient && this.patient.id && typeof this.getPatientData === 'function') {
         try { this.getPatientData() } catch (_) {}
       }
@@ -412,14 +416,8 @@ export default {
       if (!Number.isFinite(num) || num <= 0) return;
       try { this.patient && (this.patient.id = num); } catch (_) {}
       try {
-        if (this.$store) {
-          if (this.$store.commit && this.$store._mutations && this.$store._mutations['SET_PATIENT_ID']) {
-            this.$store.commit('SET_PATIENT_ID', num);
-          } else if (this.$store.dispatch && this.$store._actions && this.$store._actions['setPatientId']) {
-            this.$store.dispatch('setPatientId', num);
-          } else if (this.$store.state) {
-            this.$store.state.patientId = num;
-          }
+        if (this.$store && this.$store.dispatch) {
+          this.$store.dispatch('user/Set_PatientID', num).catch(() => {});
         }
       } catch (_) {}
       try { localStorage.setItem('patientId', String(num)); } catch (_) {}
@@ -518,14 +516,20 @@ export default {
       const id = this.switchDialog && this.switchDialog.selectedId;
       if (!id) return;
       try {
-        this.setEffectivePatientId(id, { updateUrl: true, reload: true });
-      } catch (e) {
-        // 兜底：仍保证数据刷新
-        this.syncIdToAll(id);
-        if (typeof this.getPatientData === 'function') { try { await this.getPatientData(); } catch(_) {} }
-        window.location.reload();
-      } finally {
         this.closeSwitchDialog && this.closeSwitchDialog();
+        // 先通过 Vuex dispatch 正确更新 store 中的 patientId
+        if (this.$store && this.$store.dispatch) {
+          try { await this.$store.dispatch('user/Set_PatientID', id); } catch (_) {}
+        }
+        // 再同步到 localStorage
+        try { localStorage.setItem('patientId', String(id)); } catch (_) {}
+        // 跳转时携带新的 id 参数，让 created() 钩子读到正确的 id
+        this.$router.push({ path: '/patient/patientinfo', query: { id: String(id) } });
+      } catch (e) {
+        // 兜底：强制刷新页面
+        try { localStorage.setItem('patientId', String(id)); } catch (_) {}
+        window.location.href = window.location.pathname + '#/patient/patientinfo?id=' + id;
+        window.location.reload();
       }
     },
 

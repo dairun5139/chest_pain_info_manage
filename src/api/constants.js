@@ -32,7 +32,13 @@ export const sendOpenAIRequest = async(messages) => {
       messages: [{ role: 'system', content: messages },{role: 'assistant', content: "<think>\n</think>\n\n"}]
     })
     console.log('API 响应:', response.data)
-    return response.data
+    const data = response.data
+    // 校验返回结构：API Key 无效/余额不足/频率限制时，返回的是 {error:{...}} 而非 {choices:[...]}
+    if (!data || !Array.isArray(data.choices) || data.choices.length === 0) {
+      const errMsg = (data && data.error && (data.error.message || data.error.code)) || JSON.stringify(data)
+      throw new Error('DeepSeek接口返回异常：' + errMsg)
+    }
+    return data
   } catch (error) {
     console.error('API 请求失败:', error)
     throw error

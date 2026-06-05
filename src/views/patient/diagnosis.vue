@@ -432,14 +432,8 @@ export default {
       if (!Number.isFinite(num) || num <= 0) return;
       try { if (this.patient) this.patient.id = num; } catch (_) {}
       try {
-        if (this.$store) {
-          if (this.$store.commit && this.$store._mutations && this.$store._mutations['SET_PATIENT_ID']) {
-            this.$store.commit('SET_PATIENT_ID', num);
-          } else if (this.$store.dispatch && this.$store._actions && this.$store._actions['setPatientId']) {
-            this.$store.dispatch('setPatientId', num);
-          } else if (this.$store.state) {
-            this.$store.state.patientId = num;
-          }
+        if (this.$store && this.$store.dispatch) {
+          this.$store.dispatch('user/Set_PatientID', num).catch(() => {});
         }
       } catch (_) {}
       try { localStorage.setItem('patientId', String(num)); } catch (_) {}
@@ -888,9 +882,14 @@ ECHO结果：${this.echoText || '无'}
     },
 
     async submitDiagnosis() {
+      if (this.uiLoading) return; // 防止重复点击
       this.uiLoading = true;
       try {
         const cacheKey = String(this.patient.id || '')
+        if (!cacheKey) {
+          alert('未获取到患者ID，请返回患者列表重新进入')
+          return
+        }
         const cached = this._diagnosisCache[cacheKey]
         if (cached) {
           // 同一患者已有结果，直接使用缓存，保持稳定性
@@ -905,8 +904,6 @@ ECHO结果：${this.echoText || '无'}
           await this.fetchTreatment()
           await this.fetchCare()
           await this.submitAIDiagnosis()
-          await this.$nextTick();
-          await this.waitUntil(() => !!(this.patRecordsDTO.aiDiagnosis && this.patRecordsDTO.aiTreatmentProposal && this.patRecordsDTO.aiCareProposal), 30000, 120);
           // 缓存结果
           this._diagnosisCache[cacheKey] = {
             diagnosis: this.patRecordsDTO.aiDiagnosis,
@@ -917,6 +914,9 @@ ECHO结果：${this.echoText || '无'}
             careTime: this.patRecordsDTO.aiCareTime,
           }
         }
+      } catch (e) {
+        console.error('一键诊断失败:', e)
+        alert('AI诊断请求失败，请检查网络连接后重试。错误：' + (e && e.message || String(e)))
       } finally {
         this.uiLoading = false;
       }
