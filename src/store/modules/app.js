@@ -2,7 +2,7 @@ import Cookies from 'js-cookie'
 
 const state = {
   sidebar: {
-    opened: Cookies.get('sidebarStatus') ? !!+Cookies.get('sidebarStatus') : true,
+    opened: Cookies.get('sidebarStatus') !== '0',  // 默认展开，仅用户主动收起后才记住折叠状态
     withoutAnimation: false
   },
   device: 'desktop',

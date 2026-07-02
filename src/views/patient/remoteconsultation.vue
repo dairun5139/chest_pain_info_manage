@@ -168,14 +168,19 @@ export default {
         { id: 2, name: '刘宇', hospital: '解放军301医院', dept: '心内科', registrationRank: '副主任医师', added: false, confirmed: false },
         { id: 3, name: '王寒', hospital: '南京大学医学院附属苏州医院', dept: '呼吸与危重症医学科', registrationRank: '副主任医师', added: false, confirmed: false },
         { id: 4, name: '吴伟', hospital: '解放军301医院', dept: '心内科', registrationRank: '副主任医师', added: false, confirmed: false },
-        { id: 5, name: '朱海峰', hospital: '华西医院', dept: '胸外科', registrationRank: '主任医师', added: false, confirmed: false }],
+        { id: 5, name: '朱海峰', hospital: '华西医院', dept: '胸外科', registrationRank: '主任医师', added: false, confirmed: false },
+        { id: 6, name: '尹微', hospital: '南京大学医学院附属苏州医院', dept: '心血管内科', registrationRank: '副主任医师', added: false, confirmed: false }],
       filteredDoctors: []
     }
   },
   computed: {
     uniqueHospitals() {
-      // 提取唯一的医院名称
-      return Array.from(new Set(this.doctors.map(doctor => doctor.hospital)))
+      // 提取唯一的医院名称，过滤掉空值、'无'、纯数字ID
+      return Array.from(new Set(
+        this.doctors
+          .map(doctor => doctor.hospital)
+          .filter(h => h && h !== '无' && isNaN(h))
+      ))
     },
     filterDoctors() {
       if (this.selectedHospital === '全部医院') {
@@ -523,49 +528,16 @@ export default {
         this.loading = false
       }
 
-      const response1 = await axios.post(API_URL + 'pat/frontConsult', null,
-        {
-          params: { id: id },
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': token
-          }
-        })
-      // 处理响应
-      console.log(response1)
-      if (response1.data.code === 200) {
-        const patient = response1.data.data.doctorList
-
-        // 接口返回的医生
-const apiDoctors = patient.map(({ doctorId, userName, hospital, ...rest }) => ({
-  ...rest,
-  id: doctorId,
-  name: userName,
-  hospital: hospital === null ? '无' : hospital,
-  added: false,
-  confirmed: false
-}))
-// 默认医生（与 data 中保持一致）
-const defaultDoctors = [
-  { id: 1, name: '郭伟', hospital: '解放军301医院', dept: '胸外科', registrationRank: '主治医师', added: false, confirmed: false },
-  { id: 2, name: '刘宇', hospital: '解放军301医院', dept: '心内科', registrationRank: '副主任医师', added: false, confirmed: false },
-  { id: 3, name: '王寒', hospital: '南京大学医学院附属苏州医院', dept: '呼吸与危重症医学科', registrationRank: '副主任医师', added: false, confirmed: false },
-  { id: 4, name: '吴伟', hospital: '解放军301医院', dept: '心内科', registrationRank: '副主任医师', added: false, confirmed: false },
-  { id: 5, name: '朱海峰', hospital: '华西医院', dept: '胸外科', registrationRank: '主任医师', added: false, confirmed: false }
-]
-// 合并并去重（按 name + hospital 去重）
-const merged = [...apiDoctors]
-for (const d of defaultDoctors) {
-  if (!merged.some(m => m.name === d.name && m.hospital === d.hospital)) {
-    merged.push(d)
-  }
-}
-this.doctors = merged
-this.filteredDoctors = merged
-console.log(this.doctors)
-      } else {
-        this.loading = false
-      }
+      // 医生列表完全使用前端写死数据，不依赖后端
+      this.doctors = [
+        { id: 1, name: '郭伟', hospital: '解放军301医院', dept: '胸外科', registrationRank: '主治医师', added: false, confirmed: false },
+        { id: 2, name: '刘宇', hospital: '解放军301医院', dept: '心内科', registrationRank: '副主任医师', added: false, confirmed: false },
+        { id: 3, name: '王寒', hospital: '南京大学医学院附属苏州医院', dept: '呼吸与危重症医学科', registrationRank: '副主任医师', added: false, confirmed: false },
+        { id: 4, name: '吴伟', hospital: '解放军301医院', dept: '心内科', registrationRank: '副主任医师', added: false, confirmed: false },
+        { id: 5, name: '朱海峰', hospital: '华西医院', dept: '胸外科', registrationRank: '主任医师', added: false, confirmed: false },
+        { id: 6, name: '尹微', hospital: '南京大学医学院附属苏州医院', dept: '心血管内科', registrationRank: '副主任医师', added: false, confirmed: false }
+      ]
+      this.filteredDoctors = this.doctors
     },
 
     addDoctor(doctor) {

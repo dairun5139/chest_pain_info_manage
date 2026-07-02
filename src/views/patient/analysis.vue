@@ -1,7 +1,7 @@
 <template>
   <div class="container" :key="String(($route && $route.query && ($route.query.id || $route.query.patientId)) || (patient && patient.id))">
     <div class="header">
-      <h3>行医记录分析</h3>
+      <h3>动态监测</h3>
       <button class="switch-btn" @click="openSwitchDialog">切换</button>
     </div>
 
@@ -30,6 +30,14 @@
       </div>
     </div>
 
+    <!-- 预警状态框 -->
+    <div :class="patient.isWarning ? 'warning-card danger' : 'warning-card normal'">
+      <div class="warning-title">{{ patient.isWarning ? '⚠ 当前预警' : '✓ 当前无预警' }}</div>
+      <div class="warning-content">
+        {{ patient.isWarning ? (patient.warningReason || '存在高危指标') : '未同时满足收缩压<90mmHg、胸痛持续>30分钟、心率>110次/分三项条件，未触发预警' }}
+      </div>
+    </div>
+
     <table class="analysis-table">
       <thead>
         <tr>
@@ -45,10 +53,15 @@
           <td>{{ item.time }}</td>
           <td>{{ item.interval }}</td>
           <td>
-            <span :class="{'status-yes': item.guideline === '符合', 'status-no': item.guideline !== '符合'}">
+            <span v-if="!item.interval || item.interval === '/'">／</span>
+            <span v-else :class="{'status-yes': item.guideline === '符合', 'status-no': item.guideline !== '符合'}">
               {{ item.guideline === '符合' ? '符合' : '不符合' }}
             </span>
           </td>
+        </tr>
+        <!-- 若显示行数少于标准总节点数，说明还有未采集的步骤，用省略行提示 -->
+        <tr v-if="analysis.length < Object.keys(standardGuide).length" class="ellipsis-row">
+          <td colspan="4">…… 后续流程待记录</td>
         </tr>
       </tbody>
     </table>
@@ -228,6 +241,7 @@ import { getToken } from '@/utils/auth'
 import axios from 'axios'
 import { API_URL } from '@/api/constants'
 import * as echarts from 'echarts'
+import { buildVitalsWarning } from '@/utils/vitalsWarning'
 // [CACHE-BEGIN] 患者列表简单缓存（10分钟）
 const PAT_LIST_CACHE_KEY = 'PAT_FRONT_LIST_CACHE_V1';
 const PAT_LIST_CACHE_TTL =  10 * 60 * 1000; // 10分钟
@@ -294,11 +308,25 @@ export default {
   beforeDestroy() {
     try { if (this.chartResizeObserver) { this.chartResizeObserver.disconnect(); this.chartResizeObserver = null } } catch(_) {}
     try { if (this._onWinResize) { window.removeEventListener('resize', this._onWinResize); this._onWinResize = null } } catch(_) {}
+    this.stopAutoRefresh()
+  },
+  activated() {
+    // 如果页面被 keep-alive 缓存，离开后再回来时恢复自动刷新
+    this.startAutoRefresh()
+  },
+  deactivated() {
+    // 离开页面时停止刷新，避免后台空跑请求
+    this.stopAutoRefresh()
   },
   data() {
     return {
       chartResizeObserver: null,
       _onWinResize: null,
+
+      // —— 自动刷新（动态监测，定时从后台重新拉取数据） ——
+      refreshTimer: null,
+      refreshIntervalMs: 5000, // 刷新间隔，单位毫秒，按需调整
+      _isRefreshing: false,
 
       switchDialog: { visible:false, loading:false, error:'', keyword:'', rawList:[], filtered:[], selectedId:null },
       improvementList: [],
@@ -365,7 +393,7 @@ export default {
           Interval: 60
         },
         doorToCCU:{
-          analysis: 'PCI 术后，患者生命体征平稳，转运至 CCU（心脏重症监护室）',
+          analysis: '转入 CCU（心脏重症监护室）进行监护，适用于病情危重或需要密切监护的患者（危重患者可直接入 CCU，无需经过 PCI）',
           Interval: 30
         }
       },
@@ -381,38 +409,7 @@ export default {
         { name: '报告时间', time: '21日 13:54', duration: 16 },
         { name: '初步诊断', time: '21日 14:30', duration: 36 },
       ],
-      analysis: [
-        {
-          time: '12:35',
-          analysis: 'STEMI“绿色中心”诊断，及时进行ESC和PCSI的咨询。',
-          guideline: '符合'
-        },
-        {
-          time: '12:58 - 12:58',
-          analysis: '进行心电图检查。',
-          guideline: '符合'
-        },
-        {
-          time: '12:59',
-          analysis: '发生STEMI，建议D2B < 90min。',
-          guideline: '不符合'
-        },
-        {
-          time: '14:15 - 15:00',
-          analysis: 'PCI手术实施。',
-          guideline: '符合'
-        },
-        {
-          time: '14:30',
-          analysis: '进行CCU监护。',
-          guideline: '符合'
-        },
-        {
-          time: '15:00',
-          analysis: '进行心脏超声检查。',
-          guideline: '不符合'
-        }
-      ]
+      analysis: []
     }
   },
 
@@ -457,6 +454,9 @@ export default {
       // 监听窗口resize
       this._onWinResize = () => { this.chart && this.chart.resize() }
       window.addEventListener('resize', this._onWinResize)
+
+      // 启动自动刷新：定时从后台重新拉取患者数据与时间节点数据
+      this.startAutoRefresh()
 
   },
   methods: {
@@ -764,6 +764,31 @@ openSwitchDialog() {
           doctor: userName
         };
 
+        // 预警判断：从 Vuex store 读取患者生命体征，没有再调 frontPatInfo
+        try {
+          let vitalsSource = null
+          const storeList = this.$store.getters.patientList
+          if (storeList && storeList.length > 0) {
+            vitalsSource = storeList.find(p => String(p.id) === String(id)) || null
+          }
+          if (!vitalsSource) {
+            const viRes = await axios.post(API_URL + 'pat/frontPatInfo', null, {
+              headers: { 'Content-Type': 'application/json', 'Authorization': token }
+            })
+            if (viRes.data.code === 200 && Array.isArray(viRes.data.data)) {
+              this.$store.dispatch('user/setPatientList', viRes.data.data)
+              vitalsSource = viRes.data.data.find(p => String(p.id) === String(id)) || null
+            }
+          }
+          if (vitalsSource) {
+            const warning = buildVitalsWarning(vitalsSource)
+            this.patient.isWarning = warning.isWarning
+            this.patient.warningReason = warning.warningReason
+          }
+        } catch (e) {
+          console.error('预警生命体征读取失败：', e)
+        }
+
 
         console.log(this.patient)
       } else {
@@ -919,7 +944,19 @@ arr.push({
   name: '心脏彩超时间'
 });
 
-this.analysis = arr
+// 过滤掉没有时间数据的节点（不显示在表格、时间轴、对比图中）
+const hasTime = (item) => item.time && item.time.trim() !== '';
+const filteredArr = arr.filter(hasTime);
+
+// 按时间升序排列
+const parseNodeTime = (str) => {
+  if (!str) return Infinity;
+  const d = new Date(str.replace(/\//g, '-'));
+  return isNaN(d.getTime()) ? Infinity : d.getTime();
+};
+filteredArr.sort((a, b) => parseNodeTime(a.time) - parseNodeTime(b.time));
+
+this.analysis = filteredArr
 
 
 
@@ -930,6 +967,37 @@ this.analysis = arr
     },
     getComplianceState(Interval, guideInterval) {
       return Interval <= guideInterval ? '符合' : '不符合';
+    },
+
+    // —— 自动刷新：每隔 refreshIntervalMs 重新从后台拉取一次患者数据与时间节点数据 ——
+    startAutoRefresh() {
+      this.stopAutoRefresh() // 防止重复启动多个定时器
+      this.refreshTimer = setInterval(() => {
+        this.refreshTick()
+      }, this.refreshIntervalMs)
+    },
+    stopAutoRefresh() {
+      if (this.refreshTimer) {
+        clearInterval(this.refreshTimer)
+        this.refreshTimer = null
+      }
+    },
+    async refreshTick() {
+      // 如果上一次刷新还没结束（比如网络慢），跳过这一次，避免请求堆积
+      if (this._isRefreshing) return
+      if (!this.patient || !this.patient.id) return
+      this._isRefreshing = true
+      try {
+        await this.getPatientData()
+      } catch (e) {
+        console.warn('动态监测：自动刷新患者信息失败', e)
+      }
+      try {
+        await this.getPatientTrae()
+      } catch (e) {
+        console.warn('动态监测：自动刷新时间节点失败', e)
+      }
+      this._isRefreshing = false
     },
     /**
      * 时间戳格式化函数：统一转为 "YYYY-MM-DD HH:mm" 格式
@@ -1064,15 +1132,31 @@ this.analysis = arr
     renderOrUpdateChart() {
       this.initChart()
       if (!this.chart) return
-      const x = this.categories.map(c => c.label)
-      const actual = this.categories.map(c => this._nn(this.currentDurations[c.key]))
-      const std    = this.categories.map(c => this._nn(this.standardDurations[c.key]))
-      const avg    = this.categories.map(c => {
+
+      // 只显示在 analysis 里出现过的节点（即有时间数据的节点）
+      const presentNames = new Set((this.analysis || []).map(a => a.name))
+      const activeCategories = this.categories.filter(c => {
+        // 对照 parseDurationsFromAnalysis 里的 nameMap，找到有匹配项的 category
+        const nameMap = {
+          ecg:  ['心电图采集时间','首份心电图','ECG'],
+          troponin: ['肌钙蛋白时间','肌钙蛋白'],
+          thrombolysis: ['溶栓时间','溶栓'],
+          d2b:  ['D2B时间','D2B','球囊扩张','球囊开通'],
+          ccu:  ['转至CCU时间','转入CCU'],
+          ct:   ['CT时间','CT检查时间','CT'],
+          echo: ['心脏彩超时间','彩超','超声','ECHO']
+        }
+        const aliases = nameMap[c.key] || [c.label]
+        return [...presentNames].some(n => aliases.some(alias => n.includes(alias)))
+      })
+
+      const x      = activeCategories.map(c => c.label)
+      const actual = activeCategories.map(c => this._nn(this.currentDurations[c.key]))
+      const std    = activeCategories.map(c => this._nn(this.standardDurations[c.key]))
+      const avg    = activeCategories.map(c => {
         const v = Number(this.avgDurationsAllPatients?.[c.key])
         return Number.isFinite(v) ? Math.max(0, Math.round(v)) : null
-
-      this.chart && this.chart.setOption(option, true)
-})
+      })
       this.chart.setOption({
         grid: { left: 40, right: 20, top: 40, bottom: 60 },
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' },
@@ -1191,6 +1275,37 @@ this.analysis = arr
   margin: 0 10px; /* 左右间距 */
 }
 
+.warning-card {
+  background: #fff;
+  border-radius: 5px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border-left: 5px solid #67c23a;
+}
+.warning-card.danger {
+  border-left-color: #f56c6c;
+  background: #fff5f5;
+}
+.warning-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+.warning-content {
+  color: #333;
+  font-size: 14px;
+}
+
+.ellipsis-row td {
+  text-align: center;
+  color: #aaa;
+  font-size: 14px;
+  letter-spacing: 4px;
+  padding: 10px 0;
+  border-top: 1px dashed #ddd;
+  font-style: italic;
+}
+
 .analysis-table {
   width: 100%;
   border-collapse: collapse;
@@ -1298,11 +1413,13 @@ ul {
 /* 时间轴核心区域（中间虚线 + 箭头） */
 .timeline-axis {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  gap: 40px;
   width: 100%;
-  position: relative; /* 用于虚线定位 */
+  position: relative;
   margin-bottom: 10px;
+  overflow-x: auto;
 }
 /* 蓝色虚线 */
 .axis-dash {
@@ -1343,9 +1460,11 @@ ul {
 /* 实际时长区域（下半部分红线 + 时长） */
 .timeline-duration {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 40px;
   width: 100%;
-  position: relative; /* 用于红线定位 */
+  position: relative;
+  overflow-x: auto;
 }
 /* 红色实线 */
 .duration-line {

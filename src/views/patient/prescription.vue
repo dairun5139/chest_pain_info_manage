@@ -30,29 +30,32 @@
       <!--<input v-model="diagnosis" type="text" placeholder="大模型辅助智能...">-->
       <textarea v-model="diagnosis" class="text-area" placeholder="大模型辅助智能疾病诊断..." rows="12" style="min-height:220px;" @focus="handleDiagnosisFocus" @input="handleDiagnosisInput" @blur="handleDiagnosisBlur"></textarea>
       <button class="diagnosis-button" @click="submitDiagnosis">智能处方</button>
+      <button class="diagnosis-button send-button" :disabled="!hasSmartPrescription || sendingPrescription" @click="sendPrescriptionToPatient">
+        {{ sendingPrescription ? '发送中...' : '发送给病人' }}
+      </button>
     </div>
 
 
 <div class="card-container">
   <div class="card">
     <div class="header"><button @click="">运动处方</button></div>
-    <div class="content">{{ patRecordsDTO.rxExercise }}</div>
+    <textarea class="content" v-model="patRecordsDTO.rxExercise" placeholder="暂无内容"></textarea>
   </div>
   <div class="card">
     <div class="header"><button @click="">营养处方</button></div>
-    <div class="content">{{ patRecordsDTO.rxNutrition }}</div>
+    <textarea class="content" v-model="patRecordsDTO.rxNutrition" placeholder="暂无内容"></textarea>
   </div>
   <div class="card">
     <div class="header"><button @click="">生活方式处方</button></div>
-    <div class="content">{{ patRecordsDTO.rxLifestyle }}</div>
+    <textarea class="content" v-model="patRecordsDTO.rxLifestyle" placeholder="暂无内容"></textarea>
   </div>
   <div class="card">
     <div class="header"><button @click="">药物处方</button></div>
-    <div class="content">{{ patRecordsDTO.rxMedication }}</div>
+    <textarea class="content" v-model="patRecordsDTO.rxMedication" placeholder="暂无内容"></textarea>
   </div>
   <div class="card">
     <div class="header"><button @click="">心理处方</button></div>
-    <div class="content">{{ patRecordsDTO.rxPsychology }}</div>
+    <textarea class="content" v-model="patRecordsDTO.rxPsychology" placeholder="暂无内容"></textarea>
   </div>
 </div>
 
@@ -194,6 +197,7 @@ export default {
         patientId: 0
       },
       diagnosis: "",
+      sendingPrescription: false,
       otherComplaint: '',
       otherHistory: '',
       otherExam: ''
@@ -219,6 +223,12 @@ export default {
       this.getPatientData();
       this.getDiagnosis && this.getDiagnosis();
       this.getAIDiagnosis && this.getAIDiagnosis();
+    }
+  },
+  computed: {
+    hasSmartPrescription() {
+      const r = this.patRecordsDTO || {}
+      return !!(r.rxExercise || r.rxNutrition || r.rxLifestyle || r.rxMedication || r.rxPsychology)
     }
   },
   watch: {
@@ -565,6 +575,7 @@ export default {
         this.patient.age = patientData.age
         this.patient.name = patientData.patientName
         this.patient.gender = patientData.gender
+        this.patient.phone = patientData.phone || patientData.phoneNo || patientData.mobile || ''
         //console.log(this.patient)
       } else {
         this.loading = false
@@ -914,6 +925,84 @@ export default {
       }
     },
 
+    buildPrescriptionMessage() {
+      const p = this.patient || {}
+      const r = this.patRecordsDTO || {}
+      return [
+        '【胸痛中心智能处方】',
+        `患者：${p.name || ''}`,
+        `生成时间：${this.formatDate(r.rxGeneratedAt || new Date())}`,
+        '',
+        '一、运动处方',
+        r.rxExercise || '无',
+        '',
+        '二、营养处方',
+        r.rxNutrition || '无',
+        '',
+        '三、生活方式处方',
+        r.rxLifestyle || '无',
+        '',
+        '四、药物处方',
+        r.rxMedication || '无',
+        '',
+        '五、心理处方',
+        r.rxPsychology || '无',
+        '',
+        '提示：以上内容为医生审核后的康复建议，请遵医嘱执行。'
+      ].join('\n')
+    },
+
+    copyPrescriptionText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text)
+      }
+      window.prompt('复制智能处方内容', text)
+      return Promise.resolve()
+    },
+
+    async sendPrescriptionToPatient() {
+      if (!this.hasSmartPrescription) {
+        this.$message && this.$message.warning ? this.$message.warning('请先生成智能处方') : alert('请先生成智能处方')
+        return
+      }
+      this.sendingPrescription = true
+      const token = getToken()
+      const dto = {
+        patientId: Number(this.patient.id),
+        patientName: this.patient.name || '',
+        phone: this.patient.phone || '',
+        content: this.buildPrescriptionMessage(),
+        aiSport: this.patRecordsDTO.rxExercise || '',
+        aiNutrition: this.patRecordsDTO.rxNutrition || '',
+        aiLifestyle: this.patRecordsDTO.rxLifestyle || '',
+        aiPrescription: this.patRecordsDTO.rxMedication || '',
+        aiPsycho: this.patRecordsDTO.rxPsychology || '',
+        updateTime: new Date()
+      }
+      try {
+        const res = await axios.post(API_URL + 'hospital/aiprescription/push', dto, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token
+          }
+        })
+        if (res && res.data && res.data.code === 200) {
+          this.$message && this.$message.success ? this.$message.success('智能处方已发送给病人') : alert('智能处方已发送给病人')
+        } else {
+          throw new Error((res && res.data && (res.data.msg || res.data.message)) || '发送接口暂未开通')
+        }
+      } catch (e) {
+        try {
+          await this.copyPrescriptionText(dto.content)
+          this.$message && this.$message.warning ? this.$message.warning('发送接口暂未开通，已生成可复制的智能处方内容') : alert('发送接口暂未开通，已生成可复制的智能处方内容')
+        } catch (_) {
+          window.prompt('复制智能处方内容', dto.content)
+        }
+      } finally {
+        this.sendingPrescription = false
+      }
+    },
+
 
     async fetchSmartPrescription() {
       try {
@@ -1090,6 +1179,20 @@ h3 {
   background-color: #0056b3;
 }
 
+.send-button {
+  margin-left: 10px;
+  background-color: #13a167;
+}
+
+.send-button:hover {
+  background-color: #0f8655;
+}
+
+.diagnosis-button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
 .text-area {
   width: 100%;
   height: 100px;
@@ -1108,19 +1211,13 @@ h3 {
 
   .card {
     flex: 1;
-    /* 让卡片均匀分配空间 */
     background-color: white;
     border-radius: 8px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     padding: 20px;
     margin: 10px;
-    /* height: 30vh; */
-    /* 移除固定高度 */
-
-    /* 使卡片的高度自适应内容 */
     display: flex;
     flex-direction: column;
-    /* 垂直排列内容 */
   }
 
   .header {
@@ -1140,18 +1237,29 @@ h3 {
   .content {
     text-indent: 0.00em;
     margin-top: 20px;
-    min-height: 80px;
-    /* 确保内容区域有空间 */
+    min-height: 420px;
+    height: 420px;
     padding: 10px;
     border-radius: 4px;
-    line-height: 1.5;
+    line-height: 1.6;
     letter-spacing: 0.05em;
     white-space: pre-wrap;
-    /* 保持换行 */
-    /* background: #f9f9f9; */
-    /* 可选的背景色 */
     flex-grow: 1;
-    /* 使内容区域自适应剩余空间 */
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #e0e0e0;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    background: #fafafa;
+    color: #222;
+    outline: none;
+    transition: border-color 0.2s;
+    overflow-y: auto;
+  }
+  .content:focus {
+    border-color: #409eff;
+    background: #fff;
   }
 }
 

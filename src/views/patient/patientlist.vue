@@ -5,27 +5,27 @@
 
       <div class="stat-item">
         <div class="text">
-          <p>本周入院人数: {{ admissionCount }}</p>
+          <p style="color: #007fff">本周入院人数: {{ admissionCount }}</p>
           <p></p>
-          <p style="color: #007fff">上周入院人数: {{ lastWeekAdmissionCount }}人</p>
+          <p style="color: #f0f0f0">上周入院人数: {{ lastWeekAdmissionCount }}人</p>
         </div>
         <div ref="admissionchart" class="chart-container" />
       </div>
 
       <div class="stat-item">
         <div class="text">
-          <p>本周住院人数: {{ inpatientCount }}</p>
+          <p style="color: red">本周住院人数: {{ inpatientCount }}</p>
           <p></p>
-          <p style="color: red">上周住院人数: {{ lastWeekInpatientCount }}人</p>
+          <p style="color: #f0f0f0">上周住院人数: {{ lastWeekInpatientCount }}人</p>
         </div>
         <div ref="inpatientchart" class="chart-container" />
       </div>
 
       <div class="stat-item">
         <div class="text">
-          <p>本周出院人数: {{ dischargeCount }}</p>
+          <p style="color: green">本周出院人数: {{ dischargeCount }}</p>
           <p></p>
-          <p style="color: green">上周出院人数: {{ lastWeekDischargeCount }}人</p>
+          <p style="color: #f0f0f0">上周出院人数: {{ lastWeekDischargeCount }}人</p>
         </div>
         <div ref="dischargechart" class="chart-container" />
       </div>
@@ -60,8 +60,14 @@
           class="search-input"
           @keyup.enter="searchPatients"
         >
-        <button class="search-button" @click="searchPatients">搜索</button>
+          <button class="search-button" @click="searchPatients">搜索</button>
 
+      </div>
+
+      <div class="sort-section">
+        <button class="search-button" @click="exportPatients">导出病例</button>
+        <button class="search-button" @click="triggerImport">导入病例</button>
+        <input ref="caseImportInput" type="file" accept=".csv" style="display:none" @change="importPatients">
       </div>
 
       <div class="sort-section">
@@ -99,7 +105,11 @@
         <tbody>
           <tr v-for="patient in currentPagePatients" :key="patient.id" :style="patient.isWarning ? 'background:#fff5f5' : ''">
             <td>
-              <span v-if="patient.isWarning" style="display:inline-block;background:#f00;color:#fff;font-size:11px;padding:1px 5px;border-radius:3px;margin-right:4px;vertical-align:middle;">⚠ 预警</span>
+              <span
+                v-if="patient.isWarning"
+                :title="patient.warningReason || ''"
+                style="display:inline-block;background:#f00;color:#fff;font-size:11px;padding:1px 5px;border-radius:3px;margin-right:4px;vertical-align:middle;cursor:help;"
+              >⚠ 预警</span>
               {{ patient.patientName }}
             </td>
             <td>{{ patient.outpatientId }}</td>
@@ -108,9 +118,9 @@
             <td>{{ formatDate(patient.firstMedicalTime) }}</td>
             <td>{{ formatDate(patient.onsetTime) }}</td>
             <!--          <td>{{ patient.fileTime != null ? formatDate(patient.fileTime) : '无' }}</td>-->
-            <td>{{ patient.diagnosis }}</td>
+            <td :style="{ color: getStatusColor(patient.diagnosis) }">{{ patient.diagnosis }}</td>
             <td>{{ formatDoctors(patient.doctors) }}</td>
-            <td :style="{ color: getStatusColor(patient.diagnosis) }">{{displayStatus(patient)}}</td>
+            <td>{{displayStatus(patient)}}</td>
             <td>
               <a style="color:blue" @click="viewDetails(patient.id)">[查看详情]</a> |
               <a
@@ -118,8 +128,9 @@
                 @click="patient.fillFlag ? () => {} : view_postdata(patient.id)"
               >[胸痛申报]</a>  |
               <a style="color:blue" @click="postdata(patient.id)">[申报查看]</a> |
+              <a style="color:blue" @click="fillOutcome(patient.id)">[补填转归]</a> |
               <a style="color:blue" @click="diagnosis(patient.id)">[AI问诊]</a> |
-              <a style="color:blue" @click="view_trajectory(patient.id)">[行医轨迹]</a> |
+              <a style="color:blue" @click="view_trajectory(patient.id)">[动态监测]</a> |
               <a style="color:blue" @click="survey(patient.id)">[随访]</a> |
               <a style="color:blue" @click="consulation(patient.id)">[远程会诊]</a>
               <!--   <a style="color:blue" @click="consulation(patient.id)">[会诊]</a>-->
@@ -185,6 +196,7 @@
 import * as echarts from 'echarts'
 import { API_URL } from '@/api/constants'
 import { getToken } from '@/utils/auth'
+import { enrichVitalsWarning } from '@/utils/vitalsWarning'
 import axios from 'axios'
 
 export default {
@@ -245,19 +257,21 @@ export default {
       lastWeekDischargeCount: 28,
       admissionPct: 52.94,
       startDate: '',
-      endDate: ''
+      endDate: '',
+      hasServerInpatientStats: false
     }
   },
 
   computed: {
     sortedPatients() {
+      const PINNED_NAMES = ['黄浩', '李莹', '高淑华', '马秀珍', '唐丹丹']
       const toTime = (v) => {
         if (!v) return 0
         const d = new Date(typeof v === 'string' ? v.replace(' ', 'T') : v)
         return isNaN(d.getTime()) ? 0 : d.getTime()
       }
       const safeStr = (v) => (v == null ? '' : String(v))
-      return [...this.patients].sort((a, b) => {
+      const sorted = [...this.patients].sort((a, b) => {
         if (this.sortOrder === 'outpatientId') {
           return safeStr(b.outpatientId).localeCompare(safeStr(a.outpatientId))
         } else if (this.sortOrder === 'patientName') {
@@ -286,6 +300,9 @@ export default {
         }
         return 0
       })
+      const pinned = sorted.filter(p => PINNED_NAMES.includes(p.patientName))
+      const rest = sorted.filter(p => !PINNED_NAMES.includes(p.patientName))
+      return [...pinned, ...rest]
     },
     filteredPatients() {
       // 仅渲染 firstMedicalTime 在“今天（含）之前”的患者；今天之后（未来）的记录不进入列表与分页
@@ -340,6 +357,10 @@ export default {
     this.getPatientListData()
   }
 
+    // 首页三项统计数据（本周/上周入院、住院、出院人数）不依赖患者列表缓存，
+    // 每次进入页面都应重新从接口获取，避免命中缓存时仍显示初始占位数据
+    this.fetchWeekStats()
+
     const today = new Date()
     const lastYear = new Date()
     lastYear.setMonth(today.getMonth() - 6)
@@ -359,6 +380,9 @@ export default {
     setTimeout(() => {
       this.initCharts()
     }, 100)
+  },
+  activated() {
+    this.fetchWeekStats()
   },
 
 
@@ -418,6 +442,47 @@ export default {
       }
     },
 
+    parsePatientDate(value) {
+      if (!value) return null
+      const date = new Date(typeof value === 'string' ? value.replace(' ', 'T') : value)
+      return isNaN(date.getTime()) ? null : date
+    },
+    getWeekRange(offset = 0) {
+      const now = new Date()
+      const day = now.getDay() || 7
+      const start = new Date(now)
+      start.setHours(0, 0, 0, 0)
+      start.setDate(start.getDate() - day + 1 + offset * 7)
+
+      const end = new Date(start)
+      end.setDate(start.getDate() + 7)
+      return { start, end }
+    },
+    isInWeek(dateValue, offset = 0) {
+      const date = this.parsePatientDate(dateValue)
+      if (!date) return false
+      const { start, end } = this.getWeekRange(offset)
+      return date >= start && date < end
+    },
+    isInpatientStatus(patient) {
+      const status = (this.getEffectiveStatus(patient) || '').toString()
+      return status.includes('住院') && !status.includes('出院')
+    },
+    updateWeeklyInpatientStats() {
+      if (this.hasServerInpatientStats) return
+      const list = Array.isArray(this.patientList) && this.patientList.length ? this.patientList : this.patients
+      const patients = Array.isArray(list) ? list : []
+      const countByWeek = (offset) => patients.filter(patient =>
+        this.isInWeek(patient.firstMedicalTime || patient.admissionTime || patient.onsetTime, offset) &&
+        this.isInpatientStatus(patient)
+      ).length
+
+      this.inpatientCount = countByWeek(0)
+      this.lastWeekInpatientCount = countByWeek(-1)
+      const total = this.inpatientCount + this.lastWeekInpatientCount
+      this.inpatientPct = total === 0 ? 0 : Number((this.inpatientCount / total * 100).toFixed(2))
+    },
+
     async getPatientListData() {
       this.loading = true;
       try {
@@ -442,6 +507,8 @@ export default {
       // 处理响应
       if (response.data.code === 200) {
         const mergedPatients = response.data.data
+        // 写入 Vuex store 供其他页面预警判断使用
+        this.$store.dispatch('user/setPatientList', mergedPatients)
         //console.log('mergedPatients :', mergedPatients)
 
         this.patients = Object.values(
@@ -464,13 +531,11 @@ export default {
 
             // 使用 id 作为唯一标识符
             if (!acc[id]) {
-              // 创建新的患者对象并初始化医生名数组
-              // 预警逻辑：STEMI/高危诊断 或 指定演示患者 标记为预警
-              const warningDiagnoses = ['STEMI', '急性心肌梗死', '主动脉夹层', '肺栓塞']
-              const isWarning = warningDiagnoses.some(d => (diagnosis || '').includes(d)) || id === 1
+              const warning = enrichVitalsWarning(patient)
+
               acc[id] = { id, outpatientId, patientName, gender, age, firstMedicalTime, onsetTime,
               dischargeTime: patient.dischargeTime, diagnosis, doctors: [] , status, fillFlag: convertedFillFlag,
-              isWarning }
+              isWarning: warning.isWarning, warningReason: warning.warningReason }
             }
 
             // 添加医生到医生数组中（避免重复）
@@ -482,6 +547,7 @@ export default {
           }, {})
         )
         this.patientList = this.patients
+        this.updateWeeklyInpatientStats()
 
         /* console.log("Updated patients:", this.patients);
         console.log("Sorted patients:", this.sortedPatients);
@@ -490,60 +556,58 @@ export default {
         this.loading = false
       }
 
-      const response1 = await axios.post(API_URL + 'status/admissions/week', null,
-        {
-          // params:{ id: id },
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': token
-          }
-        })
-
-      // 处理响应
-      if (response1.data.code === 200) {
-        const inPatients = response1.data.data
-        this.admissionCount = inPatients.current
-        this.lastWeekAdmissionCount = inPatients.previous
-        this.admissionPct = inPatients.pct
-
-      }
-      const response2 = await axios.post(API_URL + 'status/discharges/week', null,
-        {
-          // params:{ id: id },
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': token
-          }
-        })
-
-      // 处理响应
-      if (response2.data.code === 200) {
-        const inPatients = response2.data.data
-        this.inpatientCount = inPatients.current
-        this.lastWeekInpatientCount = inPatients.previous
-        this.inpatientPct = inPatients.pct
-      }
-
-      const response3 = await axios.post(API_URL + 'status/inpatients/day', null,
-        {
-          // params:{ id: id },
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': token
-          }
-        })
-
-      // 处理响应
-      if (response3.data.code === 200) {
-        const inPatients = response3.data.data
-        this.dischargeCount = inPatients.current
-        this.lastWeekDischargeCount = inPatients.previous
-        this.DischargePct = inPatients.pct
-      }
-      this.initCharts()
-
       } finally {
         this.loading = false;
+      }
+    },
+    /**
+     * 拉取首页三项统计数据：本周/上周 入院、住院、出院人数。
+     * 该数据与患者列表缓存无关，每次进入首页都应重新请求，
+     * 避免命中 sessionStorage 缓存时仍展示 data() 中的初始占位数值。
+     */
+    async fetchWeekStats() {
+      try {
+        const token = getToken()
+        if (!token) return  // 未登录时跳过，避免 401 污染统计数据
+
+        const response1 = await axios.post(API_URL + 'status/admissions/week', null,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': token
+            }
+          })
+
+        if (response1.data.code === 200) {
+          const inPatients = response1.data.data
+          this.admissionCount = inPatients.current
+          this.lastWeekAdmissionCount = inPatients.previous
+          this.admissionPct = inPatients.pct
+        }
+
+        const response2 = await axios.post(API_URL + 'status/discharges/week', null,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': token
+            }
+          })
+
+        if (response2.data.code === 200) {
+          const discharges = response2.data.data
+          this.dischargeCount = discharges.current
+          this.lastWeekDischargeCount = discharges.previous
+          this.DischargePct = discharges.pct
+        }
+
+        // 住院人数 = 入院 - 出院（前端估算，无需额外接口）
+        this.inpatientCount = Math.max(0, this.admissionCount - this.dischargeCount)
+        this.lastWeekInpatientCount = Math.max(0, this.lastWeekAdmissionCount - this.lastWeekDischargeCount)
+        const inpTotal = this.inpatientCount + this.lastWeekInpatientCount
+        this.inpatientPct = inpTotal === 0 ? 0 : Number((this.inpatientCount / inpTotal * 100).toFixed(2))
+        this.hasServerInpatientStats = true
+      } finally {
+        this.initCharts()
       }
     },
     sortPatients() {
@@ -562,6 +626,130 @@ export default {
         return idMatch || nameMatch; // 只返回匹配的患者
       });*/
 
+    },
+    escapeCsv(value) {
+      const text = value === null || value === undefined ? '' : String(value)
+      return `"${text.replace(/"/g, '""')}"`
+    },
+    parseCsvLine(line) {
+      const result = []
+      let current = ''
+      let inQuotes = false
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i]
+        const next = line[i + 1]
+        if (char === '"' && inQuotes && next === '"') {
+          current += '"'
+          i++
+        } else if (char === '"') {
+          inQuotes = !inQuotes
+        } else if (char === ',' && !inQuotes) {
+          result.push(current)
+          current = ''
+        } else {
+          current += char
+        }
+      }
+      result.push(current)
+      return result
+    },
+    async getNextPatientId() {
+      const response = await axios.post(API_URL + 'pat/frontPatInfo', null, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': getToken()
+        }
+      })
+      if (!response.data || response.data.code !== 200) {
+        throw new Error(response.data?.message || '获取患者编号失败')
+      }
+      const rows = Array.isArray(response.data.data) ? response.data.data : []
+      const usedIds = new Set(rows
+        .reduce((ids, item) => ids.concat([item?.patientId, item?.id]), [])
+        .map(value => Number(value))
+        .filter(id => Number.isInteger(id) && id > 0))
+      let nextId = usedIds.size ? Math.max(...usedIds) + 1 : 1
+      while (usedIds.has(nextId)) nextId++
+      return nextId
+    },
+    exportPatients() {
+      const headers = ['id', 'outpatientId', 'patientName', 'gender', 'age', 'firstMedicalTime', 'onsetTime', 'diagnosis', 'status', 'warningReason']
+      const rows = this.filteredPatients.map(patient => headers.map(key => this.escapeCsv(patient[key])).join(','))
+      const csv = '\ufeff' + headers.join(',') + '\n' + rows.join('\n')
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `胸痛病例_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    },
+    triggerImport() {
+      if (this.$refs.caseImportInput) this.$refs.caseImportInput.click()
+    },
+    importPatients(event) {
+      const file = event.target.files && event.target.files[0]
+      event.target.value = ''
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = async(e) => {
+        const text = String(e.target.result || '').replace(/^\ufeff/, '')
+        const lines = text.split(/\r?\n/).filter(Boolean)
+        if (lines.length < 2) {
+          this.$message && this.$message.warning ? this.$message.warning('CSV中没有病例数据') : alert('CSV中没有病例数据')
+          return
+        }
+        const headers = this.parseCsvLine(lines[0]).map(h => h.trim())
+        const token = getToken()
+        let success = 0
+        let nextPatientId
+        try {
+          nextPatientId = await this.getNextPatientId()
+        } catch (err) {
+          console.error('获取新患者编号失败', err)
+          this.$message && this.$message.error
+            ? this.$message.error(err.message || '获取新患者编号失败')
+            : alert(err.message || '获取新患者编号失败')
+          return
+        }
+        for (const line of lines.slice(1)) {
+          const values = this.parseCsvLine(line)
+          const row = headers.reduce((acc, key, index) => {
+            acc[key] = values[index] || ''
+            return acc
+          }, {})
+          if (!row.patientName && !row.name) continue
+          const payload = {
+            id: 0,
+            patientId: nextPatientId++,
+            patientName: row.patientName || row.name,
+            gender: row.gender || '',
+            age: row.age ? Number(row.age) : null,
+            phone: row.phone || '',
+            medicalRecordDate: row.medicalRecordDate || row.caseDate || new Date().toISOString(),
+            birthDate: row.birthDate || row.dob || '',
+            height: row.height || '',
+            weight: row.weight || '',
+            idNumber: row.idNumber || ''
+          }
+          try {
+            const res = await axios.post(API_URL + 'pat/patInfoAdd', payload, {
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': token
+              }
+            })
+            if (res && res.data && res.data.code === 200) success++
+          } catch (err) {
+            console.warn('病例导入失败:', row, err)
+          }
+        }
+        this.$message && this.$message.success ? this.$message.success(`导入完成，成功${success}条`) : alert(`导入完成，成功${success}条`)
+        this.getPatientListData()
+      }
+      reader.readAsText(file, 'utf-8')
     },
     searchPatientList(){
       const start = new Date(this.startDate)
@@ -669,9 +857,9 @@ export default {
       })
     },
     diagnosis(id) {
-      // 这里实现诊断的逻辑
+      // 智能问诊已合并进"基本信息"页面，这里统一跳转过去
       this.$store.dispatch('user/Set_PatientID', id).then(() => {
-        this.$router.push({ path: '/patient/diagnosis', query: { id: id } })
+        this.$router.push({ path: '/patient/patientinfo', query: { id: id } })
       })
     },
     viewTimeline(id) {
@@ -696,8 +884,7 @@ export default {
         this.$router.push({
           path: '/chestpain/review-readonly',
           query: {
-
-
+            id: id
           }
         })
       })
@@ -709,9 +896,16 @@ export default {
         this.$router.push({
           path: '/chestpain/review',
           query: {
-
-
+            id: id
           }
+        })
+      })
+    },
+    fillOutcome(id) {
+      this.$store.dispatch('user/Set_PatientID', id).then(() => {
+        this.$router.push({
+          path: '/chestpain/review',
+          query: { module: 'outcome' }
         })
       })
     },
@@ -732,6 +926,7 @@ export default {
       this.initAdmissionChart()
       this.initInpatientChart()
       this.initDischargeChart()
+      window.removeEventListener('resize', this.handleResize)
       window.addEventListener('resize', this.handleResize)
     },
     handleResize() {
@@ -747,6 +942,9 @@ export default {
       // this.admissionchart = echarts.init(this.$refs.admissionchart);
       if (!this.$refs.admissionchart) return // 添加空判断
       const chartDom = this.$refs.admissionchart
+      if (this.$refs.admissionchart.chart) {
+        this.$refs.admissionchart.chart.dispose()
+      }
       const myChart = echarts.init(chartDom)
 
       this.$refs.admissionchart.chart = myChart
@@ -777,14 +975,14 @@ export default {
           },
           data: [
             {
-              value: this.lastWeekAdmissionCount,
+              value: this.admissionCount,
               name: '本周',
               itemStyle: {
                 color: '#007fff'
               }
             },
             {
-              value: this.admissionCount,
+              value: this.lastWeekAdmissionCount,
               name: '上周',
               itemStyle: {
                 color: '#f0f0f0'
@@ -798,7 +996,11 @@ export default {
     },
     initInpatientChart() {
       // this.inpatientchart = echarts.init(this.$refs.inpatientChart);
+      if (!this.$refs.inpatientchart) return
       const chartDom = this.$refs.inpatientchart
+      if (this.$refs.inpatientchart.chart) {
+        this.$refs.inpatientchart.chart.dispose()
+      }
       const myChart = echarts.init(chartDom)
       this.$refs.inpatientchart.chart = myChart
 
@@ -828,14 +1030,14 @@ export default {
           },
           data: [
             {
-              value: this.lastWeekInpatientCount,
-              name: '当前',
+              value: this.inpatientCount,
+              name: '本周',
               itemStyle: {
                 color: 'red'
               }
             },
             {
-              value: this.inpatientCount,
+              value: this.lastWeekInpatientCount,
               name: '上周',
               itemStyle: {
                 color: '#f0f0f0'
@@ -849,7 +1051,11 @@ export default {
     },
     initDischargeChart() {
       // this.dischargechart = echarts.init(this.$refs.dischargechart);
+      if (!this.$refs.dischargechart) return
       const chartDom = this.$refs.dischargechart
+      if (this.$refs.dischargechart.chart) {
+        this.$refs.dischargechart.chart.dispose()
+      }
       const myChart = echarts.init(chartDom)
       this.$refs.dischargechart.chart = myChart
 
@@ -879,14 +1085,14 @@ export default {
           },
           data: [
             {
-              value: this.lastWeekDischargeCount,
-              name: '当前',
+              value: this.dischargeCount,
+              name: '本周',
               itemStyle: {
                 color: 'green'
               }
             },
             {
-              value: this.dischargeCount,
+              value: this.lastWeekDischargeCount,
               name: '上周',
               itemStyle: {
                 color: '#f0f0f0'

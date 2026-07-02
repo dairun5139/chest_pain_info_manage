@@ -46,8 +46,9 @@ const responseFake = (url, type, respond) => {
 module.exports = app => {
   // parse app.body
   // https://expressjs.com/en/4x/api.html#req.body
-  app.use(bodyParser.json())
-  app.use(bodyParser.urlencoded({
+  // 跳过 /baidu-api/ 路径，避免body-parser消耗请求体导致代理转发时body为空
+  app.use(/^(?!\/baidu-api)/, bodyParser.json())
+  app.use(/^(?!\/baidu-api)/, bodyParser.urlencoded({
     extended: true
   }))
 

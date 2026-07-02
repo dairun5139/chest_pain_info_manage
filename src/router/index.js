@@ -493,6 +493,16 @@ export const asyncRoutes = [
           title: '电子病历',
           noCache: true,
           roles: [3, 7]}
+      },
+      {
+        path: 'analysis',
+        component: () => import('@/views/patient/analysis'),
+        name: 'analysis',
+        meta: {
+          title: '动态监测',
+          noCache: true,
+          roles: [3, 7]
+        }
       }
     ]
   },
@@ -513,6 +523,7 @@ export const asyncRoutes = [
         path: 'submit',
         component: () => import('@/views/patient/submit_info'),
         name: 'ChestPainSubmit',
+        hidden: true,
         meta: {
           title: '病人注册',
           noCache: true,
@@ -530,24 +541,14 @@ export const asyncRoutes = [
         }
       },
       {
-        path:'review-readonly',
+        path: 'review-readonly',
         component: () => import('@/views/patient/view_submitInfo_readonly'),
-        name:'ChestPainReviewOnly',
+        name: 'ChestPainReviewOnly',
         meta: {
           title: '申报查看',
           noCache: true,
-          roles: [3,7],
-        },
-      },
-      {
-        path: 'ocr',
-        component: () => import('@/views/patient/ocr'),
-        name: 'OcrPage',
-        meta: {
-          title: 'OCR识别',
-          noCache: true,
-          roles: [3,7],
-        },
+          roles: [3, 7],
+        }
       }
     ]
   },
@@ -573,24 +574,6 @@ export const asyncRoutes = [
   {
     path: '/patient',
     component: Layout,
-    redirect: '/patient/diagnosis',
-    children: [
-      {
-        path: 'diagnosis',
-        component: () => import('@/views/patient/diagnosis'),
-        name: 'diagnosis',
-        meta: {
-          title: '智能诊断',
-          icon: 'skill',
-          noCache: true,
-          roles: [3, 7]
-        }
-      }
-    ]
-  },
-  {
-    path: '/patient',
-    component: Layout,
     redirect: '/patient/survey',
     children: [
       {
@@ -604,24 +587,6 @@ export const asyncRoutes = [
           roles: [3, 7]
         },
         hidden: true
-      }
-    ]
-  },
-  {
-    path: '/patient',
-    component: Layout,
-    redirect: '/patient/analysis',
-    children: [
-      {
-        path: 'analysis',
-        component: () => import('@/views/patient/analysis'),
-        name: 'analysis',
-        meta: {
-          title: '行医轨迹分析',
-          icon: 'skill',
-          noCache: true,
-          roles: [3, 7]
-        }
       }
     ]
   },
@@ -687,7 +652,6 @@ export const asyncRoutes = [
     path: '/patient',
     component: Layout,
     redirect: '/patient/remoteconsultation',
-    name: 'remoteconsultation',
     children: [
       {
         path: 'remoteconsultation',
@@ -706,23 +670,41 @@ export const asyncRoutes = [
     path: '/patient',
     component: Layout,
     redirect: '/patient/conference',
-    name: 'conference',
-    hidden: true,
     children: [
       {
         path: 'conference',
         component: () => import('@/views/patient/conference'),
         name: 'conference',
         meta: {
-          title: '视频会议',
+          title: '视频会诊',
           icon: 'skill',
-          hidden:true,
           noCache: true,
           roles: [3, 7]
-        }
+        },
+        hidden: true
       }
     ]
   },
+  {
+    path: '/patient',
+    component: Layout,
+    redirect: '/patient/chestflow',
+    children: [
+      {
+        path: 'chestflow',
+        component: () => import('@/views/patient/chestpain_flow'),
+        name: 'chestflow',
+        meta: {
+          title: '胸痛诊疗流程',
+          icon: 'skill',
+          noCache: true,
+          roles: [3, 7]
+        },
+      }
+    ]
+  },
+
+
 
   { path: '*', redirect: '/404', hidden: true }
 ]

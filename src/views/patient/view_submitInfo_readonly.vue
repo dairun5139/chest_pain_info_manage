@@ -545,7 +545,9 @@
                 <label for="bloodPressure">血压 <span style="color:red">*</span>：</label>
                 <input id="bloodPressure" v-model="emergencyData.bloodPressure" type="text" placeholder="mmHg" readonly>
               </div>
+            </div>
 
+            <div class="form-row">
               <div class="form-row-item">
                 <label for="temperature">体温 <span style="color:red">*</span>：</label>
                 <input id="temperature" v-model="emergencyData.temperature" type="number" placeholder="℃" @blur="validateTemperature" readonly>
@@ -2947,7 +2949,7 @@
     </div>
 
     <div class="submit-bar" >
-      <button class="primary-btn" @click="view_postdata(patientId)">修改</button>
+      <button class="primary-btn" @click="view_postdata(patientId)">补填转归</button>
     </div>
       <div v-if="footerCheckTime" class="submit-time">
       上次提交时间：{{formatDateTime(footerCheckTime)}}
@@ -2963,7 +2965,6 @@ import { getToken } from '@/utils/auth'
 import axios from 'axios'
 import { API_URL } from '@/api/constants'
 import TimelineModal from './TimelineModal.vue'
-import { mapState } from "vuex";
 export default {
   components: { TimelineModal },
   data() {
@@ -2974,15 +2975,7 @@ export default {
       currentModule: 'emergency', // 默认显示急救模块
       showTimeline: false, // 控制弹窗显示
       maxDateTime: '',
-      timelineEvents: [
-        { time: '25-04-07 15:04:07', description: '发病时间' },
-        { time: '25-04-27 16:17', description: '就医时间' },
-        { time: '25-04-27 16:20', description: 'CT检查时间' },
-        { time: '25-04-27 16:50', description: 'CT结果' },
-        { time: '25-04-27 18:02', description: '心电图结果' },
-        { time: '25-04-27 18:14', description: '医生建议' }
-
-      ],
+      timelineEvents: [],
       // 基本信息
       formData: {
         name: '',
@@ -3319,9 +3312,14 @@ export default {
   },
   computed: {
 
-    ...mapState({
-      patientId: (state) => state.user.patientId
-    }),
+    patientId: {
+      get() {
+        return this.$store.state.user.patientId
+      },
+      set(val) {
+        this.$store.dispatch('user/Set_PatientID', val)
+      }
+    },
     isCriticalInsuranceRadio:{
       get(){
         const x = this.emergencyData.isCriticalIllnessInsurance;
@@ -3334,9 +3332,15 @@ export default {
     },
   },
   async created() {
-    // const patientId = this.$store.getters.patientId
-    // this.patientId = patientId
-    if (this.patientId === '') this.patientId = 1
+    // 优先使用路由 query 中的 id（防止刷新页面后 Vuex 中的 patientId 丢失）
+    const queryId = this.$route && this.$route.query && this.$route.query.id
+    if (queryId) {
+      this.patientId = Number(queryId)
+    } else if (!this.patientId) {
+      console.error('未获取到患者ID，无法加载胸痛申报数据')
+      this.showMessage('未获取到患者ID，请从患者列表重新进入本页面', 'error')
+      return
+    }
     await this.getPatientData()
     this.getTimeLine()
     // this.fetchImages(imageType, patientId, imageDate);
@@ -3695,15 +3699,22 @@ export default {
         allEvents.push({time: this.chestPainData.cardiacSurgeryConsultationTime, description: '心外科会诊时间'})
       }
 
-      // 按时间排序
-      allEvents.sort((a, b) => {
-        const timeA = new Date(a.time)
-        const timeB = new Date(b.time)
-        return timeA - timeB
-      })
+      const parseTimelineTime = (time) => {
+        if (!time) return null
+        const normalized = String(time).replace(/\//g, '-')
+        const parsed = new Date(normalized)
+        const timestamp = parsed.getTime()
+        return Number.isFinite(timestamp) ? timestamp : null
+      }
+
+      const sortedEvents = allEvents
+        .map(event => ({ ...event, sortTime: parseTimelineTime(event.time) }))
+        .filter(event => event.sortTime !== null)
+        .sort((a, b) => a.sortTime - b.sortTime)
+        .map(({ sortTime, ...event }) => event)
 
       // 更新 timelineEvents
-      this.timelineEvents.splice(0, this.timelineEvents.length, ...allEvents)
+      this.timelineEvents.splice(0, this.timelineEvents.length, ...sortedEvents)
       console.log('timeline end')
       console.log(this.timelineEvents)
 
@@ -3982,7 +3993,7 @@ export default {
         this.emergencyData.pulse = d.pulse ?? '';
         this.emergencyData.respiration = d.respiration ?? '';
         this.emergencyData.temperature = d.temperature ?? '';
-        this.emergencyData.heartRate = d.oxygenSaturation ?? '';
+        this.emergencyData.heartRate = d.heartRate ?? '';
         this.footerCheckTime = d.checkTime ?? '';
 
         if (d) {
@@ -5378,8 +5389,7 @@ export default {
         this.$router.push({
           path: '/chestpain/review',
           query: {
-
-
+            module: 'outcome'
           }
         })
       })
@@ -5387,8 +5397,13 @@ export default {
 
     async updateFillFlag() {
       try {
-        const response = await axios.post(API_URL + 'pat/updateFillFlag', null, {
-          params: {patientId: this.patientId},
+        const pid = parseInt(this.patientId, 10)
+        if (!pid || isNaN(pid)) {
+          console.warn('updateFillFlag: patientId 无效，跳过')
+          return false
+        }
+        const response = await axios.post(API_URL + 'pat/patInfoUpdate', null, {
+          params: { patientId: pid, fillFlag: 1 },
           headers: {
             'Content-Type': 'application/json',
             'Authorization': this.token
@@ -5400,8 +5415,8 @@ export default {
         return true;
       } catch (err) {
         console.error('updateFillFlag error:', err);
-        this.showMessage('更新患者标志位失败', 'error');
-        throw err;
+        console.warn('更新患者填写标志失败，不影响已提交数据');
+        return false;
       }
     },
 

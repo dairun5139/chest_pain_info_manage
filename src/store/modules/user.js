@@ -14,7 +14,8 @@ const state = {
   registrationRankId: '',
   patient: [],
   username: '',
-  patientId: ''
+  patientId: '',
+  patientList: []
 }
 
 const mutations = {
@@ -50,6 +51,9 @@ const mutations = {
   },
   SET_PATIENTID: (state, patientId) => {
     state.patientId = patientId
+  },
+  SET_PATIENT_LIST: (state, list) => {
+    state.patientList = list || []
   }
 }
 
@@ -155,6 +159,10 @@ const actions = {
       console.log(state)
       resolve()
     })
+  },
+
+  setPatientList({ commit }, list) {
+    commit('SET_PATIENT_LIST', list)
   }
 
 }

@@ -1,72 +1,7 @@
 <template>
   <div class="form-container">
 
-    <!-- 智能识别浮动入口（右上角） -->
-    <div class="ocr-float-btn" @click="openOcrDialog" title="上传图片自动识别填表">
-      📷 智能识别
-    </div>
-
-    <!-- OCR 识别弹窗 -->
-    <div v-if="ocrDialog.visible" class="ocr-dialog-backdrop" @click.self="ocrDialog.visible = false">
-      <div class="ocr-dialog">
-        <div class="ocr-dialog-header">
-          <span>智能识别 · 快速填表</span>
-          <button class="ocr-close-btn" @click="closeOcrDialog">✕</button>
-        </div>
-        <div class="ocr-dialog-body">
-          <div class="ocr-panel">
-            <div class="ocr-upload-area" @click="selectOcrFile" @dragover.prevent @drop.prevent="handleOcrDrop">
-              <input ref="ocrFileInput" type="file" accept="image/*" class="ocr-file-input" @change="handleOcrUpload">
-              <div v-if="!ocrDialog.imgUrl" class="ocr-upload-placeholder">
-                <div class="ocr-upload-icon">📷</div>
-                <div>将图片拖到此处，或点击上传</div>
-                <p>支持 JPG / PNG / BMP，单张不超过 10MB</p>
-              </div>
-              <img v-else :src="ocrDialog.imgUrl" class="ocr-preview-img">
-            </div>
-            <div class="ocr-preview-panel">
-              <div v-if="ocrDialog.loading" class="ocr-loading">
-                识别中，请稍候…
-                <div class="ocr-progress"><span :style="{ width: ocrDialog.progress + '%' }"></span></div>
-              </div>
-              <div v-if="ocrDialog.resultText" class="ocr-result">
-                <p><strong>原始识别文本：</strong></p>
-                <textarea v-model="ocrDialog.resultText" rows="8"></textarea>
-              </div>
-            </div>
-          </div>
-          <div v-if="ocrDialog.error" class="ocr-error">{{ ocrDialog.error }}</div>
-          <div v-if="ocrHasAnyParsed" class="ocr-parsed">
-            <div class="ocr-parsed-title">自动解析字段（可修改后填入）</div>
-            <div class="ocr-field-grid">
-              <label v-if="ocrDialog.parsedData.name !== undefined">姓名<input v-model="ocrDialog.parsedData.name"></label>
-              <label v-if="ocrDialog.parsedData.gender !== undefined">性别<input v-model="ocrDialog.parsedData.gender"></label>
-              <label v-if="ocrDialog.parsedData.age !== undefined">年龄<input v-model="ocrDialog.parsedData.age"></label>
-              <label v-if="ocrDialog.parsedData.dob !== undefined">出生日期<input v-model="ocrDialog.parsedData.dob"></label>
-              <label v-if="ocrDialog.parsedData.idNumber !== undefined">证件号<input v-model="ocrDialog.parsedData.idNumber"></label>
-              <label v-if="ocrDialog.parsedData.phone !== undefined">电话<input v-model="ocrDialog.parsedData.phone"></label>
-              <label v-if="ocrDialog.parsedData.ethnicity !== undefined">民族<input v-model="ocrDialog.parsedData.ethnicity"></label>
-              <label v-if="ocrDialog.parsedData.inpatientId !== undefined">住院号<input v-model="ocrDialog.parsedData.inpatientId"></label>
-              <label v-if="ocrDialog.parsedData.outpatientId !== undefined">门诊号<input v-model="ocrDialog.parsedData.outpatientId"></label>
-              <label v-if="ocrDialog.parsedData.onsetTime !== undefined">发病时间<input v-model="ocrDialog.parsedData.onsetTime"></label>
-              <label v-if="ocrDialog.parsedData.address !== undefined">发病地址<input v-model="ocrDialog.parsedData.address"></label>
-              <label v-if="ocrDialog.parsedData.detailedAddress !== undefined">详细地址<input v-model="ocrDialog.parsedData.detailedAddress"></label>
-            </div>
-          </div>
-          <div v-if="ocrDialog.extraLines.length" class="ocr-extra">
-            未匹配内容：
-            <span v-for="(line, index) in ocrDialog.extraLines" :key="index">{{ line }}</span>
-          </div>
-        </div>
-        <div class="ocr-dialog-footer">
-          <button :disabled="ocrDialog.loading || !ocrHasAnyParsed" @click="applyOcrParsedData">填入当前申报表</button>
-          <button @click="clearOcrResult">重新识别</button>
-          <button @click="closeOcrDialog">取消</button>
-        </div>
-      </div>
-    </div>
-
-    <form @submit.prevent="handleSubmit" ref="mainForm">
+    <form @submit.prevent="handleSubmit">
 
       <div class="form-section">
         <div class="module">
@@ -106,8 +41,8 @@
               <input id="age" v-model="formData.age" type="number" placeholder="请输入年龄" required>
             </div>
             <div class="form-row-item">
-              <label for="dob">出生日期：</label>
-              <input id="dob" v-model="formData.dob" type="date" :max="maxDateTime">
+              <label for="dob">出生日期：<span style="color: red;">*</span></label>
+              <input id="dob" v-model="formData.dob" type="date" :max="maxDateTime" required>
             </div>
             <div class="form-row-item">
               <label for="ethnicity">民族：<span style="color: red;">*</span></label>
@@ -201,15 +136,15 @@
               </select>
             </div>
             <div class="form-row-item">
-              <label for="height">身高：</label>
-              <input id="height" v-model="formData.height" type="text" placeholder="厘米（选填）">
+              <label for="height">身高：<span style="color: red;">*</span></label>
+              <input id="height" v-model="formData.height" type="text" placeholder="厘米" required>
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-row-item">
-              <label for="weight">体重：</label>
-              <input id="weight" v-model="formData.weight" type="text" placeholder="公斤（选填）">
+              <label for="weight">体重：<span style="color: red;">*</span></label>
+              <input id="weight" v-model="formData.weight" type="text" placeholder="公斤" required>
             </div>
             <div class="form-row-item">
               <label for="caseDate">病例归属日期：<span style="color: red;">*</span></label>
@@ -248,7 +183,7 @@
           患者转归
         </button>
       </div>
-      <div v-show="currentModule === 'emergency'" class="form-section">
+      <div v-if="currentModule === 'emergency'" class="form-section">
         <!--        <h3>急救</h3>-->
 
 
@@ -267,8 +202,28 @@
 
           <div class="form-row">
             <div class="form-row-item">
-              <label for="onsetTime">发病时间 <span style="color: red;">*</span>：</label>
+              <label for="onsetTime">发病时间：</label>
               <input id="onsetTime" v-model="emergencyData.onsetTime" type="datetime-local" :max="maxDateTime" @change="validateTime(emergencyData, 'onsetTime')">
+            </div>
+            <div class="form-row-item">
+              <label>无法精确到分钟：</label>
+              <input id="False" v-model="emergencyData.hasSpecificOnsetTime" type="radio" value="False">
+              <label for="False">否</label>
+              <input id="True" v-model="emergencyData.hasSpecificOnsetTime" type="radio" value="True">
+              <label for="True">是</label>
+            </div>
+            <div v-if="emergencyData.hasSpecificOnsetTime === 'True'" class="form-row-item">
+              <label for="specificTime">具体时间：</label>
+              <select id="specificTime" v-model="emergencyData.specificOnsetTime">
+                <option value="">请选择</option>
+                <option value="1">凌晨(0点到6点)</option>
+                <option value="2">清晨(6到8点)</option>
+                <option value="3">上午(8到12点)</option>
+                <option value="4">中午(12到14点)</option>
+                <option value="5">下午(14到17点)</option>
+                <option value="6">傍晚(17到19点)</option>
+                <option value="7">晚上(19到24点)</option>
+              </select>
             </div>
           </div>
 
@@ -302,9 +257,9 @@
             </div>
             <div class="form-row-item">
               <label>大病医保：</label>
-              <input id="True" v-model="emergencyData.isCriticalIllnessInsurance" type="radio" value="True">
+              <input id="True" v-model="emergencyData.severeInsurance" type="radio" value="True">
               <label for="True">是</label>
-              <input id="False" v-model="emergencyData.isCriticalIllnessInsurance" type="radio" value="False">
+              <input id="False" v-model="emergencyData.severeInsurance" type="radio" value="False">
               <label for="False">否</label>
             </div>
           </div>
@@ -312,7 +267,7 @@
 
         <!-- 病情状况模块 -->
         <div class="module">
-          <h3>病情状况<span style="color: red;">*</span></h3>
+          <h3>病情状况</h3>
           <div class="symptom-group">
             <div class="symptom-row">
               <input id="symptom1" v-model="emergencyData.symptomslevel" type="radio" value="1">
@@ -359,7 +314,7 @@
         <div class="module">
           <h3>来院方式</h3>
           <div class="form-row">
-            <label>来院方式 <span style="color: red;">*</span>:</label>
+            <label>来院方式：</label>
             <input id="120" v-model="emergencyData.source" type="radio" :value="1">
             <label for="120">呼叫（120或其他）出车</label>
             <input id="transfer" v-model="emergencyData.source" type="radio" :value="2">
@@ -373,7 +328,7 @@
           <div v-if="emergencyData.source === 1">
             <div class="form-row">
 
-              <label>出车单位 <span style="color: red;">*</span>：</label>
+              <label>出车单位：</label>
               <input id="ambulance120" v-model="emergencyData.transportUnit" type="radio" value="120救护车">
               <label for="ambulance120">120救护车</label>
               <input id="hospitalAmbulance" v-model="emergencyData.transportUnit" type="radio" value="本院救护车">
@@ -385,18 +340,18 @@
 
             <div class="form-row">
               <div class="form-row-item">
-                <label for="callTime">呼救时间 <span style="color: red;">*</span>：</label>
+                <label for="callTime">呼救时间：</label>
                 <input id="callTime" v-model="emergencyData.callTime" type="datetime-local" placeholder="请输入呼救时间" :max="maxDateTime" @change="validateTime(emergencyData, 'callTime')">
               </div>
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label for="arrivalTime">到达医院大门时间 <span style="color: red;">*</span>：</label>
+                <label for="arrivalTime">到达医院大门时间：</label>
                 <input id="arrivalTime" v-model="emergencyData.arrivalTime" type="datetime-local" placeholder="请输入到达时间" :max="maxDateTime" @change="validateTime(emergencyData, 'arrivalTime')">
               </div>
 
               <div class="form-row-item">
-                <label>直接转送上级医院 <span style="color: red;">*</span>：</label>
+                <label>直接转送上级医院：</label>
                 <input id="transferFalse" v-model="emergencyData.directTransfer" type="radio" value="False">
                 <label for="transferFalse">否</label>
                 <input id="transferTrue" v-model="emergencyData.directTransfer" type="radio" value="True">
@@ -405,7 +360,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label for="firstContactTime">首次医疗接触时间 <span style="color: red;">*</span>：</label>
+                <label for="firstContactTime">首次医疗接触时间：</label>
                 <input id="firstContactTime" v-model="emergencyData.firstContactTime" type="datetime-local" placeholder="请输入首次接触时间" :max="maxDateTime" @change="validateTime(emergencyData, 'firstContactTime')">
               </div>
 
@@ -414,7 +369,6 @@
                 <input id="firstDoctorTime" v-model="emergencyData.firstDoctorTime" type="datetime-local" placeholder="请输入接诊时间" :max="maxDateTime" @change="validateTime(emergencyData, 'firstDoctorTime')">
               </div>
             </div>
-
             <div class="form-row">
               <div class="form-row-item">
                 <label for="medicalStaff">医护人员：</label>
@@ -422,17 +376,26 @@
               </div>
             </div>
 
-
           </div>
 
           <div v-if="emergencyData.source === 2">
             <div class="form-row">
               <div class="form-row-item">
-                <label>转院类型 <span style="color: red;">*</span>：</label>
+                <label>转院类型：</label>
                 <input id="networkHospital" v-model="emergencyData.transferType" type="radio" value="网络医院">
                 <label for="networkHospital">网络医院</label>
                 <input id="otherMedicalInstitution" v-model="emergencyData.transferType" type="radio" value="其他医疗机构">
                 <label for="otherMedicalInstitution">其他医疗机构</label>
+              </div>
+              <div v-if="emergencyData.transferType === '网络医院'" class="form-row-item">
+                <label for="networkHospitalType">网络医院类型：</label>
+                <select id="networkHospitalType" v-model="emergencyData.networkHospitalType">
+                  <option value="">请选择</option>
+                  <option value="1">救治点</option>
+                  <option value="2">救治单元</option>
+                  <option value="3">其他</option>
+
+                </select>
               </div>
             </div>
             <div class="form-row">
@@ -443,36 +406,36 @@
               </div>
 
               <div class="form-row-item">
-                <label for="firstContactTime">首次医疗接触时间 <span style="color: red;">*</span>：</label>
+                <label for="firstContactTime">首次医疗接触时间：</label>
                 <input id="firstContactTime" v-model="emergencyData.firstContactTime" type="datetime-local" placeholder="请输入首次接触时间" :max="maxDateTime" @change="validateTime(emergencyData, 'firstContactTime')">
               </div>
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label for="transferInTime">转出医院入门时间 <span style="color: red;">*</span>：</label>
+                <label for="transferInTime">转出医院入门时间：</label>
                 <input id="transferInTime" v-model="emergencyData.transferInTime" type="datetime-local" placeholder="请输入入门时间" :max="maxDateTime" @change="validateTime(emergencyData, 'transferInTime')">
               </div>
 
               <div class="form-row-item">
-                <label for="decisionTransferTime">决定转院时间 <span style="color: red;">*</span>：</label>
+                <label for="decisionTransferTime">决定转院时间：</label>
                 <input id="decisionTransferTime" v-model="emergencyData.decisionTransferTime" type="datetime-local" placeholder="请输入决定转院时间" :max="maxDateTime" @change="validateTime(emergencyData, 'decisionTransferTime')">
               </div>
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label for="transferOutTime">转出医院出门时间 <span style="color: red;">*</span>：</label>
+                <label for="transferOutTime">转出医院出门时间：</label>
                 <input id="transferOutTime" v-model="emergencyData.transferOutTime" type="datetime-local" placeholder="请输入出门时间" :max="maxDateTime" @change="validateTime(emergencyData, 'transferOutTime')">
               </div>
 
               <div class="form-row-item">
-                <label for="arrivalAtHospitalTime">到达本院大门时间 <span style="color: red;">*</span>：</label>
+                <label for="arrivalAtHospitalTime">到达本院大门时间：</label>
                 <!--<input type="datetime-local" id="arrivalAtHospitalTime" v-model="emergencyData.arrivalAtHospitalTime" placeholder="请输入到达时间"  :max="maxDateTime" @change="validateTime(emergencyData, 'arrivalAtHospitalTime')"/>-->
                 <input id="arrivalAtHospitalTime" v-model="emergencyData.arrivalTime" type="datetime-local" placeholder="请输入到达时间" :max="maxDateTime" @change="validateTime(emergencyData, 'arrivalTime')">
               </div>
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label for="inHospitalConsultationTime">院内接诊时间 <span style="color: red;">*</span>：</label>
+                <label for="inHospitalConsultationTime">院内接诊时间：</label>
                 <input id="inHospitalConsultationTime" v-model="emergencyData.inHospitalConsultationTime" type="datetime-local" placeholder="请输入接诊时间" :max="maxDateTime" @change="validateTime(emergencyData, 'inHospitalConsultationTime')">
               </div>
 
@@ -486,18 +449,18 @@
           <div v-if="emergencyData.source === 3">
             <div class="form-row">
               <div class="form-row-item">
-                <label for="arrivalAtHospitalTime">到达本院大门时间 <span style="color: red;">*</span>：</label>
+                <label for="arrivalAtHospitalTime">到达本院大门时间：</label>
                 <input id="arrivalAtHospitalTime" v-model="emergencyData.arrivalAtHospitalTime" type="datetime-local" placeholder="请输入到达时间" :max="maxDateTime" @change="validateTime(emergencyData, 'arrivalAtHospitalTime')">
               </div>
 
               <div class="form-row-item">
-                <label for="firstContactTime">首次医疗接触时间 <span style="color: red;">*</span>：</label>
+                <label for="firstContactTime">首次医疗接触时间：</label>
                 <input id="firstContactTime" v-model="emergencyData.firstContactTime" type="datetime-local" placeholder="请输入首次接触时间" :max="maxDateTime" @change="validateTime(emergencyData, 'firstContactTime')">
               </div>
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label for="firstDoctorTime">首诊医师接诊时间 <span style="color: red;">*</span>：</label>
+                <label for="firstDoctorTime">首诊医师接诊时间：</label>
                 <input id="firstDoctorTime" v-model="emergencyData.firstDoctorTime" type="datetime-local" placeholder="请输入接诊时间" :max="maxDateTime" @change="validateTime(emergencyData, 'firstDoctorTime')">
               </div>
 
@@ -510,12 +473,12 @@
           <div v-if="emergencyData.source === 4">
             <div class="form-row">
               <div class="form-row-item">
-                <label for="department">发病地点 <span style="color: red;">*</span>：</label>
+                <label for="department">发病地点：</label>
                 <input id="department" v-model="emergencyData.department" type="text" placeholder="请输入地点">
               </div>
 
               <div class="form-row-item">
-                <label for="firstContactTime">首次医疗接触时间 <span style="color: red;">*</span>：</label>
+                <label for="firstContactTime">首次医疗接触时间：</label>
                 <input id="firstContactTime" v-model="emergencyData.firstContactTime" type="datetime-local" placeholder="请输入首次接触时间" :max="maxDateTime" @change="validateTime(emergencyData, 'firstContactTime')">
               </div>
             </div>
@@ -543,7 +506,7 @@
           <h3>基础生命体征</h3>
           <div class="form-row">
             <div class="form-row-item">
-              <label for="consciousness">意识 <span style="color: red;">*</span>：</label>
+              <label for="consciousness">意识：</label>
               <select id="consciousness" v-model="emergencyData.consciousness">
                 <option value="">请选择</option>
                 <option value="1">清醒</option>
@@ -553,12 +516,12 @@
               </select>
             </div>
             <div class="form-row-item">
-              <label for="respiration">呼吸（次/分钟） <span style="color: red;">*</span>：</label>
+              <label for="respiration">呼吸（次/分钟）：</label>
               <input id="respiration" v-model="emergencyData.respiration" type="number" placeholder="次/分钟" @input="checkValue(emergencyData,'respiration', emergencyData.respiration, 0, 100, '次/分钟')">
             </div>
 
             <div class="form-row-item">
-              <label for="pulse">脉搏（次/分钟） <span style="color: red;">*</span>：</label>
+              <label for="pulse">脉搏（次/分钟）：</label>
               <input id="pulse" v-model="emergencyData.pulse" type="number" placeholder="次/分钟" @input="checkValue(emergencyData,'pulse', emergencyData.pulse, 0, 300, '次/分钟')">
             </div>
 
@@ -566,19 +529,17 @@
 
           <div class="form-row">
             <div class="form-row-item">
-              <label for="heartRate">心率 <span style="color: red;">*</span>：</label>
+              <label for="heartRate">心率：</label>
               <input id="heartRate" v-model="emergencyData.heartRate" type="number" placeholder="次/分钟" @input="checkValue(emergencyData,'heartRate', emergencyData.heartRate, 0, 300, '次/分钟')">
             </div>
 
             <div class="form-row-item">
-              <label for="bloodPressure">血压 <span style="color: red;">*</span>：</label>
+              <label for="bloodPressure">血压：</label>
               <input id="bloodPressure" v-model="emergencyData.bloodPressure" type="text" placeholder="mmHg">
             </div>
-          </div>
 
-          <div class="form-row">
             <div class="form-row-item">
-              <label for="temperature">体温 <span style="color: red;">*</span>：</label>
+              <label for="temperature">体温：</label>
               <input id="temperature" v-model="emergencyData.temperature" type="number" placeholder="℃" @blur="validateTemperature">
             </div>
 
@@ -591,13 +552,13 @@
         </div>
       </div>
 
-      <div v-show="currentModule === 'chestPain'" class="form-section">
+      <div v-if="currentModule === 'chestPain'" class="form-section">
         <!--        <h3>胸痛</h3>-->
         <!-- 心电图模块 -->
         <div class="module">
           <h3>心电图</h3>
           <div class="form-row">
-            <label>心电图 <span style="color: red;">*</span>：</label>
+            <label>心电图：</label>
             <input id="ecgTrue" v-model="chestPainData.ecg" type="radio" value="True">
             <label for="ecgTrue">是</label>
             <input id="ecgFalse" v-model="chestPainData.ecg" type="radio" value="False">
@@ -619,11 +580,11 @@
               </div>
               <div class="ecg-record-content">
                 <div class="form-row-item">
-                  <label :for="'ecgTime' + index">心电图时间 <span style="color: red;">*</span>：</label>
+                  <label :for="'ecgTime' + index">心电图时间：</label>
                   <input :id="'ecgTime' + index" v-model="ecg.time" type="datetime-local" class="datetimepicker" placeholder="选择时间" :max="maxDateTime" @change="validecgdateTime(index)">
                 </div>
                 <div class="form-row-item ECG">
-                  <label :for="'ecgFile' + index">心电图文件 <span style="color: red;">*</span>：</label>
+                  <label :for="'ecgFile' + index">心电图文件：</label>
                   <input :id="'ecgFile' + index" type="file" accept="image/*,.pdf,.doc,.docx" @change="(event) => handleFileUpload(event, index)">
                 </div>
                 <div v-if="ecg.fileName" class="file-preview-container">
@@ -646,7 +607,7 @@
 
             <div class="form-row">
               <div class="form-row-item">
-                <label for="ecgDiagFalsesisTime">心电图诊断时间 <span style="color: red;">*</span>：</label>
+                <label for="ecgDiagFalsesisTime">心电图诊断时间：</label>
                 <input id="ecgDiagFalsesisTime" v-model="chestPainData.ecgDiagFalsesisTime" type="datetime-local" class="datetimepicker" placeholder="选择时间" :max="maxDateTime" @change="validateTime(chestPainData, 'ecgDiagFalsesisTime')">
               </div>
             </div>
@@ -654,21 +615,21 @@
             <!-- 其他字段保持不变 -->
           </div>
           <div class="form-row">
-            <label>远程心电图传输 <span style="color: red;">*</span>：</label>
+            <label>远程心电图传输：</label>
             <input id="ecgRemoteTrue" v-model="chestPainData.ecgRemote" type="radio" value="True">
             <label for="ecgRemoteTrue">接受120/网络医院心电图</label>
             <input id="ecgRemoteFalse" v-model="chestPainData.ecgRemote" type="radio" value="False">
             <label for="ecgRemoteFalse">未传输</label>
             <div v-if="chestPainData.ecgRemote === 'True'" class="form-row-item">
-              <label>时间 <span style="color: red;">*</span>：</label>
+              <label>时间：</label>
               <input v-model="chestPainData.ecgRemoteTime" type="datetime-local" placeholder="选择时间" :max="maxDateTime" @change="validateTime(chestPainData, 'ecgRemoteTime')">
             </div>
             <div v-if="chestPainData.ecgRemote === 'True'" class="form-row-item">
-              <label>传输方式 <span style="color: red;">*</span>：</label>
-              <input id="transmissionMethod1" v-model="chestPainData.transmissionMethod" type="radio" value="1">
-              <label for="transmissionMethod1">实时监控</label>
-              <input id="transmissionMethod2" v-model="chestPainData.transmissionMethod" type="radio" value="2">
-              <label for="transmissionMethod2">微信群</label>
+              <label>传输方式：</label>
+              <input id="remoteEcgTransmissionMethod1" v-model="chestPainData.remoteEcgTransmissionMethod" type="radio" value="1">
+              <label for="remoteEcgTransmissionMethod1">实时监控</label>
+              <input id="remoteEcgTransmissionMethod2" v-model="chestPainData.remoteEcgTransmissionMethod" type="radio" value="2">
+              <label for="remoteEcgTransmissionMethod2">微信群</label>
             </div>
           </div>
         </div>
@@ -678,7 +639,7 @@
           <h3>实验室检查</h3>
           <div class="form-row">
             <div class="form-row-item">
-              <label>肌钙蛋白 <span style="color: red;">*</span>：</label>
+              <label>肌钙蛋白：</label>
 
               <input id="troponinFalse" v-model="chestPainData.troponin" type="radio" value="False">
               <label for="troponinFalse">否</label>
@@ -691,24 +652,24 @@
               <div class="form-row">
                 <div class="form-row-item">
                   <label>{{ index === 0 ? '首次肌钙蛋白' : '肌钙蛋白' }}：</label>
-                  <input :id="'troponinT' + index" v-model="troponin.type" type="radio" value="TnT">
+                  <input :id="'troponinT' + index" v-model="troponin.type" type="checkbox" value="TnT">
                   <label :for="'troponinT' + index">TnT</label>
-                  <input :id="'troponinI' + index" v-model="troponin.type" type="radio" value="TnI">
-                  <label :for="'troponinI' + index">TnI</label>
+                  <input :id="'troponinI' + index" v-model="troponin.type" type="checkbox" value="Tnl">
+                  <label :for="'troponinI' + index">Tnl</label>
                 </div>
 
                 <div class="form-row-item">
                   <label>单位：</label>
-                  <input :id="'unitNgMl' + index" v-model="troponin.unit" type="radio" value="ng/ml">
+                  <input :id="'unitNgMl' + index" v-model="troponin.unit" type="checkbox" value="ng/ml">
                   <span :for="'unitNgMl' + index">ng/ml</span>
-                  <input :id="'unitUgL' + index" v-model="troponin.unit" type="radio" value="ug/L">
+                  <input :id="'unitUgL' + index" v-model="troponin.unit" type="checkbox" value="ug/L">
                   <span :for="'unitUgL' + index">ug/L</span>
 
-                  <input :id="'unitNgL' + index" v-model="troponin.unit" type="radio" value="ng/L">
+                  <input :id="'unitNgL' + index" v-model="troponin.unit" type="checkbox" value="ng/L">
                   <span :for="'unitNgL' + index">ng/L</span>
-                  <input :id="'unitPgMl' + index" v-model="troponin.unit" type="radio" value="pg/ml">
+                  <input :id="'unitPgMl' + index" v-model="troponin.unit" type="checkbox" value="pg/ml">
                   <span :for="'unitPgMl' + index">pg/ml</span>
-                  <input :id="'unitMgL' + index" v-model="troponin.unit" type="radio" value="mg/L">
+                  <input :id="'unitMgL' + index" v-model="troponin.unit" type="checkbox" value="mg/L">
                   <span :for="'unitMgL' + index">mg/L</span>
                 </div>
 
@@ -718,19 +679,19 @@
 
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>结果 <span style="color: red;">*</span>：</label>
+                  <label>结果：</label>
                   <input :id="'resultNegative' + index" v-model="troponin.result" type="radio" value="阴性">
                   <span :for="'resultNegative' + index">阴性</span>
                   <input :id="'resultPositive' + index" v-model="troponin.result" type="radio" value="阳性">
                   <span :for="'resultPositive' + index">阳性</span>
                 </div>
                 <div class="form-row-item">
-                  <label for="'bloodDrawTime' + index">抽血完成时间 <span style="color: red;">*</span>：</label>
+                  <label for="'bloodDrawTime' + index">抽血完成时间：</label>
                   <input :id="'bloodDrawTime' + index" v-model="troponin.bloodDrawTime" type="datetime-local" class="datetimepicker" placeholder="选择时间" :max="maxDateTime" @change="checktroponinTimes(index)">
                 </div>
 
                 <div class="form-row-item">
-                  <label for="'reportTime' + index">获得报告时间 <span style="color: red;">*</span>：</label>
+                  <label for="'reportTime' + index">获得报告时间：</label>
                   <input :id="'reportTime' + index" v-model="troponin.reportTime" type="datetime-local" class="datetimepicker" placeholder="选择时间" :max="maxDateTime" @change="checktroponinTimes(index)">
                 </div>
                 <div class="form-row-item">
@@ -747,7 +708,7 @@
 
           <div class="form-row">
             <div class="form-row-item">
-              <label>血清肌酐 <span style="color: red;">*</span>：</label>
+              <label>血清肌酐：</label>
 
               <input id="creatinineFalse" v-model="chestPainData.creatinine" type="radio" value="False">
               <label for="creatinineFalse">否</label>
@@ -755,7 +716,7 @@
               <label for="creatinineTrue">是</label>
             </div>
             <div v-if="chestPainData.creatinine === 'True'" class="form-row-item">
-              <label>数值 v：</label>
+              <label>数值：</label>
               <input v-model="chestPainData.creatinineValue" type="number" placeholder="输入值">
               <span>umol/L</span>
             </div>
@@ -763,7 +724,7 @@
 
           <div class="form-row">
             <div class="form-row-item">
-              <label>D二聚体 <span style="color: red;">*</span>：</label>
+              <label>D二聚体：</label>
 
               <input id="dDimerFalse" v-model="chestPainData.dDimer" type="radio" value="False">
               <label for="dDimerFalse">否</label>
@@ -771,7 +732,7 @@
               <label for="dDimerTrue">是</label>
             </div>
             <div v-if="chestPainData.dDimer === 'True'" class="form-row-item">
-              <label>数值 <span style="color: red;">*</span>：</label>
+              <label>数值：</label>
               <input v-model="chestPainData.dDimerValue" type="number" placeholder="输入值">
               <span>ug/L</span>
             </div>
@@ -779,7 +740,7 @@
 
           <div class="form-row">
             <div class="form-row-item">
-              <label>BNP <span style="color: red;">*</span>：</label>
+              <label>BNP：</label>
 
               <input id="bnpFalse" v-model="chestPainData.bnp" type="radio" value="False">
               <label for="bnpFalse">否</label>
@@ -787,7 +748,7 @@
               <label for="bnpTrue">是</label>
             </div>
             <div v-if="chestPainData.bnp === 'True'" class="form-row-item">
-              <label>数值 <span style="color: red;">*</span>：</label>
+              <label>数值：</label>
               <input v-model="chestPainData.bnpValue" type="number" placeholder="输入值">
               <span>pg/ml</span>
             </div>
@@ -795,7 +756,7 @@
 
           <div class="form-row">
             <div class="form-row-item">
-              <label>NT-proBNP <span style="color: red;">*</span>：</label>
+              <label>NT-proBNP：</label>
 
               <input id="ntProBnpFalse" v-model="chestPainData.ntProBnp" type="radio" value="False">
               <label for="ntProBnpFalse">否</label>
@@ -803,7 +764,7 @@
               <label for="ntProBnpTrue">是</label>
             </div>
             <div v-if="chestPainData.ntProBnp === 'True'" class="form-row-item">
-              <label>数值 <span style="color: red;">*</span>：</label>
+              <label>数值：</label>
               <input v-model="chestPainData.ntProBnpValue" type="number" placeholder="输入值">
               <span>pg/ml</span>
             </div>
@@ -811,7 +772,7 @@
 
           <div class="form-row">
             <div class="form-row-item">
-              <label>Myo <span style="color: red;">*</span>：</label>
+              <label>Myo：</label>
 
               <input id="myoFalse" v-model="chestPainData.myo" type="radio" value="False">
               <label for="myoFalse">否</label>
@@ -819,7 +780,7 @@
               <label for="myoTrue">是</label>
             </div>
             <div v-if="chestPainData.myo === 'True'" class="form-row-item">
-              <label>数值 <span style="color: red;">*</span>：</label>
+              <label>数值：</label>
               <input v-model="chestPainData.myoValue" type="number" placeholder="输入值">
               <input id="myoValueUnitng" v-model="chestPainData.myoValueUnit" type="radio" value="ng/ml">
               <span for="myoValueUnitng">ng/ml</span>
@@ -830,7 +791,7 @@
 
           <div class="form-row">
             <div class="form-row-item">
-              <label>CKMB <span style="color: red;">*</span>：</label>
+              <label>CKMB：</label>
 
               <input id="ckmbFalse" v-model="chestPainData.ckmb" type="radio" value="False">
               <label for="ckmbFalse">否</label>
@@ -838,7 +799,7 @@
               <label for="ckmbTrue">是</label>
             </div>
             <div v-if="chestPainData.ckmb === 'True'" class="form-row-item">
-              <label>数值 <span style="color: red;">*</span>：</label>
+              <label>数值：</label>
               <input v-model="chestPainData.ckmbValue" type="number" placeholder="输入值">
 
               <input id="ckmbValueUnitng" v-model="chestPainData.ckmbValueUnit" type="radio" value="ng/ml">
@@ -856,7 +817,7 @@
         <div class="module">
           <h3>心内科会诊</h3>
           <div class="form-row">
-            <label>是否会诊 <span style="color: red;">*</span>：</label>
+            <label>是否会诊：</label>
             <input id="consultTrue" v-model="chestPainData.consult" type="radio" value="True">
             <label for="consultTrue">是</label>
             <input id="consultFalse" v-model="chestPainData.consult" type="radio" value="False">
@@ -864,18 +825,18 @@
           </div>
           <div v-if="chestPainData.consult==='True'" class="form-row">
             <div class="form-row-item">
-              <label>会诊类型 <span style="color: red;">*</span>：</label>
+              <label>会诊类型：</label>
               <input id="consultationType1" v-model="chestPainData.consultationType" type="radio" value="现场会诊">
               <label for="consultationType1">现场会诊</label>
               <input id="consultationType2" v-model="chestPainData.consultationType" type="radio" value="远程会诊">
               <label for="consultationType2">远程会诊</label>
             </div>
             <div class="form-row-item">
-              <label>通知心外科会诊 <span style="color: red;">*</span>：</label>
+              <label>通知心外科会诊：</label>
               <input v-model="chestPainData.cardiacSurgeryConsultationFalsetification" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'cardiacSurgeryConsultationFalsetification')">
             </div>
             <div class="form-row-item">
-              <label>心外科会诊时间 <span style="color: red;">*</span>：</label>
+              <label>心外科会诊时间：</label>
               <input v-model="chestPainData.cardiacSurgeryConsultationTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'cardiacSurgeryConsultationTime')">
             </div>
           </div>
@@ -885,7 +846,7 @@
         <div class="module">
           <!--              <h3>诊断</h3>-->
           <div class="form-row">
-            <label>初步诊断 <span style="color: red;">*</span>：</label>
+            <label>初步诊断：</label>
             <input id="diagFalsesisSTEMI" v-model="chestPainData.diagFalsesis" type="radio" value="STEMI">
             <span for="diagFalsesisSTEMI">STEMI</span>
             <input id="diagFalsesisNSTEMI" v-model="chestPainData.diagFalsesis" type="radio" value="NSTEMI">
@@ -910,7 +871,7 @@
           <div v-if="chestPainData.diagFalsesis === 'STEMI'">
             <div class="form-row">
               <div class="form-row-item">
-                <label>初步诊断时间 <span style="color: red;">*</span>：</label>
+                <label>初步诊断时间：</label>
                 <input v-model="chestPainData.diagFalsesisTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'diagFalsesisTime')">
               </div>
               <div class="form-row-item">
@@ -920,8 +881,7 @@
             </div>
 
             <div class="form-row">
-              <label>心功能分级 <span style="
-              color: red;">*</span>：</label>
+              <label>心功能分级：</label>
               <input id="classI" v-model="chestPainData.heartFunctionClass" type="radio" value="I级(FalseCHF)">
               <span for="classI">I级(FalseCHF)</span>
               <input id="classII" v-model="chestPainData.heartFunctionClass" type="radio" value="II级(ralesand/orJVD)">
@@ -935,14 +895,14 @@
             <div class="form-row">
 
               <div class="form-row-item">
-                <label>绕行急诊 <span style="color: red;">*</span>:</label>
+                <label>绕行急诊:</label>
                 <input id="emergencyBypassFalse" v-model="chestPainData.emergencyBypass" type="radio" value="False">
                 <label for="emergencyBypassFalse">否</label>
                 <input id="emergencyBypassTrue" v-model="chestPainData.emergencyBypass" type="radio" value="True">
                 <label for="emergencyBypassTrue">是</label>
               </div>
               <div class="form-row-item">
-                <label>绕行CCU <span style="color: red;">*</span>：</label>
+                <label>绕行CCU：</label>
 
                 <input id="ccuBypassFalse" v-model="chestPainData.ccuBypass" type="radio" value="False">
                 <label for="ccuBypassFalse">否</label>
@@ -955,7 +915,7 @@
             <div class="form-row">
 
               <div class="form-row-item">
-                <label>抗血小板治疗 <span style="color: red;">*</span>：</label>
+                <label>抗血小板治疗：</label>
                 <input id="antiplateletFalse" v-model="chestPainData.antiplateletTreatment" type="radio" value="False">
                 <label for="antiplateletFalse">否</label>
                 <input id="antiplateletTrue" v-model="chestPainData.antiplateletTreatment" type="radio" value="True">
@@ -1006,7 +966,7 @@
             <div class="form-row">
 
               <div class="form-row-item">
-                <label>抗凝 <span style="color: red;">*</span>：</label>
+                <label>抗凝：</label>
                 <input id="anticoagulationFalse" v-model="chestPainData.anticoagulation" type="radio" value="False">
                 <label for="anticoagulationFalse">否</label>
                 <input id="anticoagulationTrue" v-model="chestPainData.anticoagulation" type="radio" value="True">
@@ -1046,7 +1006,7 @@
             <div class="form-row">
 
               <div class="form-row-item">
-                <label>他汀治疗 <span style="color: red;">*</span>：</label>
+                <label>他汀治疗：</label>
                 <input id="statinFalse" v-model="chestPainData.statinTreatment" type="radio" value="False">
                 <label for="statinFalse">否</label>
                 <input id="statinTrue" v-model="chestPainData.statinTreatment" type="radio" value="True">
@@ -1057,7 +1017,7 @@
             <div class="form-row">
 
               <div class="form-row-item">
-                <label>β受体阻滞剂 <span style="color: red;">*</span>：</label>
+                <label>β受体阻滞剂：</label>
                 <input id="betaBlockerFalse" v-model="chestPainData.betaBlocker" type="radio" value="False">
                 <label for="betaBlockerFalse">否</label>
                 <input id="betaBlockerTrue" v-model="chestPainData.betaBlocker" type="radio" value="True">
@@ -1065,7 +1025,7 @@
               </div>
             </div>
             <div class="form-row">
-              <label>再灌注措施 <span style="color: red;">*</span>：</label>
+              <label>再灌注措施：</label>
               <div style="display: flex; align-items: center;">
                 <input id="reperfusionFalse" v-model="chestPainData.reperfusion" type="radio" value="False">
                 <label for="reperfusionFalse">否</label>
@@ -1075,59 +1035,59 @@
             </div>
 
             <div v-if="chestPainData.reperfusion === 'True'" class="form-row">
-              <label>措施 <span style="color: red;">*</span>：</label>
+              <label>措施：</label>
               <div style="display: flex; align-items: center;">
-                <input id="directPCI" v-model="chestPainData.reperfusionMethod" type="radio" value="直接PCI">
+                <input id="directPCI" v-model="chestPainData.reperfusionMeasures" type="radio" value="直接PCI">
                 <span for="directPCI">直接PCI</span>
-                <input id="thrombolysis" v-model="chestPainData.reperfusionMethod" type="radio" value="溶栓">
+                <input id="thrombolysis" v-model="chestPainData.reperfusionMeasures" type="radio" value="溶栓">
                 <span for="thrombolysis">溶栓</span>
-                <input id="rescuePCI" v-model="chestPainData.reperfusionMethod" type="radio" value="补救PCI">
+                <input id="rescuePCI" v-model="chestPainData.reperfusionMeasures" type="radio" value="补救PCI">
                 <span for="rescuePCI">补救PCI</span>
-                <input id="thrombolysisIntervention" v-model="chestPainData.reperfusionMethod" type="radio" value="溶栓后介入">
+                <input id="thrombolysisIntervention" v-model="chestPainData.reperfusionMeasures" type="radio" value="溶栓后介入">
                 <span for="thrombolysisIntervention">溶栓后介入</span>
-                <input id="CABG" v-model="chestPainData.reperfusionMethod" type="radio" value="CABG">
+                <input id="CABG" v-model="chestPainData.reperfusionMeasures" type="radio" value="CABG">
                 <span for="CABG">CABG</span>
-                <input id="transportPCI" v-model="chestPainData.reperfusionMethod" type="radio" value="转运PCI">
+                <input id="transportPCI" v-model="chestPainData.reperfusionMeasures" type="radio" value="转运PCI">
                 <span for="transportPCI">转运PCI</span>
-                <input id="FalseReperfusion" v-model="chestPainData.reperfusionMethod" type="radio" value="无再灌注措施">
+                <input id="FalseReperfusion" v-model="chestPainData.reperfusionMeasures" type="radio" value="无再灌注措施">
                 <span for="FalseReperfusion">无再灌注措施</span>
               </div>
             </div>
 
-            <div v-if="chestPainData.reperfusionMethod==='直接PCI'">
+            <div v-if="chestPainData.reperfusionMeasures==='直接PCI'">
               <div class="form-row">
                 <div class="form-row-item">
                   <label>决定医生：</label>
                   <input v-model="chestPainData.decidingDoctor" type="text" placeholder="输入医生姓名">
                 </div>
                 <div class="form-row-item">
-                  <label>决定介入手术时间 <span style="color: red;">*</span>：</label>
+                  <label>决定介入手术时间：</label>
                   <input v-model="chestPainData.interventionDecisionTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'interventionDecisionTime')">
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>启动导管室时间 <span style="color: red;">*</span>：</label>
+                  <label>启动导管室时间：</label>
                   <input v-model="chestPainData.cathLabStartTime" type="text" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'cathLabStartTime')">
                 </div>
                 <div class="form-row-item">
-                  <label>开始知情同意时间 <span style="color: red;">*</span>：</label>
+                  <label>开始知情同意时间：</label>
                   <input v-model="chestPainData.informedConsentStartTime" type="text" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'informedConsentStartTime')">
                 </div>
               </div>
 
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>签署知情同意时间 <span style="color: red;">*</span>：</label>
+                  <label>签署知情同意时间：</label>
                   <input v-model="chestPainData.informedConsentSignatureTime" type="text" placeholder="输入时间">
                 </div>
               </div>
             </div>
 
-            <div v-if="chestPainData.reperfusionMethod==='溶栓'">
+            <div v-if="chestPainData.reperfusionMeasures==='溶栓'">
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>溶栓筛查 <span style="color: red;">*</span>：</label>
+                  <label>溶栓筛查：</label>
                   <input id="screeningSuitable" v-model="chestPainData.thrombolysisScreening" type="radio" value="合适">
                   <span for="screeningSuitable">合适</span>
                   <input id="screeningUnsuitable" v-model="chestPainData.thrombolysisScreening" type="radio" value="不合适">
@@ -1136,7 +1096,7 @@
                   <span for="screeningFalsetScreened">未筛查</span>
                 </div>
                 <div class="form-row-item">
-                  <label>溶栓治疗 <span style="color: red;">*</span>：</label>
+                  <label>溶栓治疗：</label>
                   <input id="thrombolysisTrue" v-model="chestPainData.thrombolysisTreatment" type="radio" value="有">
                   <label for="thrombolysisTrue">有</label>
                   <input id="thrombolysisFalse" v-model="chestPainData.thrombolysisTreatment" type="radio" value="无">
@@ -1146,14 +1106,14 @@
 
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>直达溶栓场所 <span style="color: red;">*</span>：</label>
+                  <label>直达溶栓场所：</label>
                   <input id="transportFalse" v-model="chestPainData.thrombolysisLocation" type="radio" value="False">
                   <label for="transportFalse">否</label>
                   <input id="transportTrue" v-model="chestPainData.thrombolysisLocation" type="radio" value="True">
                   <label for="transportTrue">是</label>
                 </div>
                 <div class="form-row-item">
-                  <label>溶栓场所 <span style="color: red;">*</span>：</label>
+                  <label>溶栓场所：</label>
                   <select v-model="chestPainData.thrombolysisLocationDetail">
                     <option value="本院急诊科">本院急诊科</option>
                     <option value="本院心内科">本院心内科</option>
@@ -1163,27 +1123,27 @@
               </div>
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>开始知情同意 <span style="color: red;">*</span>：</label>
+                  <label>开始知情同意：</label>
                   <input v-model="chestPainData.informedConsentStartTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'clopidoginformedConsentStartTimerelTime')">
                 </div>
                 <div class="form-row-item">
-                  <label>签署知情同意书 <span style="color: red;">*</span>：</label>
+                  <label>签署知情同意书：</label>
                   <input v-model="chestPainData.informedConsentSignature" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'informedConsentSignature')">
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>开始溶栓时间 <span style="color: red;">*</span>：</label>
+                  <label>开始溶栓时间：</label>
                   <input v-model="chestPainData.thrombolysisStartTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'thrombolysisStartTime')">
                 </div>
                 <div class="form-row-item">
-                  <label>溶栓结束时间 <span style="color: red;">*</span>：</label>
+                  <label>溶栓结束时间：</label>
                   <input v-model="chestPainData.thrombolysisEndTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'thrombolysisEndTime')">
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>溶栓药物 <span style="color: red;">*</span>：</label>
+                  <label>溶栓药物：</label>
                   <input id="firstGeneration" v-model="chestPainData.thrombolysisDrug" type="radio" value="第一代">
                   <span for="firstGeneration">第一代</span>
                   <input id="secondGeneration" v-model="chestPainData.thrombolysisDrug" type="radio" value="第二代">
@@ -1193,7 +1153,7 @@
                 </div>
 
                 <div class="form-row-item">
-                  <label>剂量 <span style="color: red;">*</span>：</label>
+                  <label>剂量：</label>
                   <input id="fullDose" v-model="chestPainData.thrombolysisDose" type="radio" value="全量">
                   <label for="fullDose">全量</label>
                   <input id="halfDose" v-model="chestPainData.thrombolysisDose" type="radio" value="半量">
@@ -1203,7 +1163,7 @@
 
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>溶栓再通 <span style="color: red;">*</span>：</label>
+                  <label>溶栓再通：</label>
                   <input id="reperfusionFalse" v-model="chestPainData.thrombolysisReperfusion" type="radio" value="False">
                   <label for="reperfusionFalse">否</label>
                   <input id="reperfusionTrue" v-model="chestPainData.thrombolysisReperfusion" type="radio" value="True">
@@ -1212,36 +1172,36 @@
               </div>
             </div>
 
-            <div v-if="chestPainData.reperfusionMethod==='补救PCI' || chestPainData.reperfusionMeasures==='择期介入'">
+            <div v-if="chestPainData.reperfusionMeasures==='补救PCI' || chestPainData.reperfusionMeasures==='择期介入'">
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>决定介入手术时间 <span style="color: red;">*</span>：</label>
+                  <label>决定介入手术时间：</label>
                   <input v-model="chestPainData.interventionDecisionTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'interventionDecisionTime')">
                 </div>
                 <div class="form-row-item">
-                  <label>造影开始时间 <span style="color: red;">*</span>：</label>
+                  <label>造影开始时间：</label>
                   <input v-model="chestPainData.angiographyStartTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'angiographyStartTime')">
                 </div>
               </div>
             </div>
 
-            <div v-if="chestPainData.reperfusionMethod==='CABG'">
+            <div v-if="chestPainData.reperfusionMeasures==='CABG'">
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>决定CABG时间 <span style="color: red;">*</span>：</label>
+                  <label>决定CABG时间：</label>
                   <input v-model="chestPainData.cabgDecisionTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'cabgDecisionTime')">
                 </div>
                 <div class="form-row-item">
-                  <label>开始CABG时间 <span style="color: red;">*</span>：</label>
+                  <label>开始CABG时间：</label>
                   <input v-model="chestPainData.cabgStartTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'cabgStartTime')">
                 </div>
               </div>
             </div>
 
-            <div v-if="chestPainData.reperfusionMethod==='转运PCI'">
+            <div v-if="chestPainData.reperfusionMeasures==='转运PCI'">
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>转运PCI <span style="color: red;">*</span>：</label>
+                  <label>转运PCI：</label>
                   <input id="transferOut" v-model="chestPainData.transportPCI" type="radio" value="转出患者">
                   <label for="transferOut">转出患者</label>
                   <input id="transferIn" v-model="chestPainData.transportPCI" type="radio" value="接收患者">
@@ -1250,7 +1210,7 @@
               </div>
             </div>
 
-            <div v-if="chestPainData.reperfusionMethod==='无再灌注措施'">
+            <div v-if="chestPainData.reperfusionMeasures==='无再灌注措施'">
               <div class="form-row">
                 <label>无再灌注措施原因：</label>
                 <input id="FalsePain" v-model="chestPainData.FalseReperfusionReason" type="checkbox" value="无明确胸痛">
@@ -1271,20 +1231,20 @@
             </div>
 
 
-            <div v-if="chestPainData.reperfusionMethod==='直接PCI'||chestPainData.reperfusionMeasures==='溶栓'||chestPainData.reperfusionMeasures==='补救PCI'">
+            <div v-if="chestPainData.reperfusionMeasures==='直接PCI'||chestPainData.reperfusionMeasures==='溶栓'||chestPainData.reperfusionMeasures==='补救PCI'">
               <h3>导管相关信息</h3>
               <div class="form-row">
                 <div class="form-row-item">
-                  <label for="catheterLabActivationTime">导管室激活时间 <span style="color: red;">*</span>：</label>
+                  <label for="catheterLabActivationTime">导管室激活时间：</label>
                   <input id="catheterLabActivationTime" v-model="catheterData.catheterLabActivationTime" type="datetime-local" :max="maxDateTime" @change="validateTime(catheterData, 'catheterLabActivationTime')">
                 </div>
                 <div class="form-row-item">
-                  <label for="patientArrivalCatheterLabTime">患者到达导管室时间 <span style="color: red;">*</span>：</label>
+                  <label for="patientArrivalCatheterLabTime">患者到达导管室时间：</label>
                   <input id="patientArrivalCatheterLabTime" v-model="catheterData.patientArrivalCatheterLabTime" type="datetime-local" :max="maxDateTime" @change="validateTime(catheterData, 'patientArrivalCatheterLabTime')">
                 </div>
                 <div class="form-row-item">
                   <label for="interventionist">介入医师姓名：</label>
-                  <input id="interventionist" v-model="catheterData.interventionist" type="text" >
+                  <input id="interventionist" v-model="catheterData.interventionist" type="text" :max="maxDateTime" @change="validateTime(catheterData, 'interventionist')">
                 </div>
               </div>
 
@@ -1293,19 +1253,19 @@
 
               <div class="form-row">
                 <div class="form-row-item">
-                  <label for="startPunctureTime">开始穿刺时间 <span style="color: red;">*</span>：</label>
+                  <label for="startPunctureTime">开始穿刺时间：</label>
                   <input id="startPunctureTime" v-model="catheterData.startPunctureTime" type="datetime-local" :max="maxDateTime" @change="validateTime(catheterData, 'startPunctureTime')">
                 </div>
 
                 <div class="form-row-item">
-                  <label for="angiographyStartTime">造影开始时间 <span style="color: red;">*</span>：</label>
+                  <label for="angiographyStartTime">造影开始时间：</label>
                   <input id="angiographyStartTime" v-model="catheterData.angiographyStartTime" type="datetime-local" :max="maxDateTime" @change="validateTime(catheterData, 'angiographyStartTime')">
                 </div>
               </div>
 
               <div class="form-row">
                 <div class="form-row-item">
-                  <label for="anticoagulationDrugAdministrationTime">抗凝给药时间 <span style="color: red;">*</span>：</label>
+                  <label for="anticoagulationDrugAdministrationTime">抗凝给药时间：</label>
                   <input id="anticoagulationDrugAdministrationTime" v-model="catheterData.anticoagulationDrugAdministrationTime" type="datetime-local" :max="maxDateTime" @change="validateTime(catheterData, 'anticoagulationDrugAdministrationTime')">
                 </div>
 
@@ -1334,7 +1294,7 @@
 
               <div class="form-row">
                 <div class="form-row-item">
-                  <label for="surgeryEndTime">手术结束时间 <span style="color: red;">*</span>：</label>
+                  <label for="surgeryEndTime">手术结束时间：</label>
                   <input id="surgeryEndTime" v-model="catheterData.surgeryEndTime" type="datetime-local" :max="maxDateTime" @change="validateTime(catheterData, 'surgeryEndTime')">
                 </div>
               </div>
@@ -1363,7 +1323,7 @@
           <div v-if="chestPainData.diagFalsesis === 'NSTEMI'">
             <div class="form-row">
               <div class="form-row-item">
-                <label>初步诊断时间 <span style="color: red;">*</span>：</label>
+                <label>初步诊断时间：</label>
                 <input v-model="chestPainData.diagFalsesisTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'diagFalsesisTime')">
               </div>
               <div class="form-row-item">
@@ -1373,7 +1333,7 @@
             </div>
 
             <div class="form-row">
-              <label>心功能分级 <span style="color: red;">*</span>：</label>
+              <label>心功能分级：</label>
               <input id="classI" v-model="chestPainData.heartFunctionClass" type="radio" value="I级(FalseCHF)">
               <span for="classI">I级(FalseCHF)</span>
               <input id="classII" v-model="chestPainData.heartFunctionClass" type="radio" value="II级(ralesand/orJVD)">
@@ -1387,14 +1347,14 @@
             <div class="form-row">
 
               <div class="form-row-item">
-                <label>绕行急诊 <span style="color: red;">*</span>:</label>
+                <label>绕行急诊:</label>
                 <input id="emergencyBypassFalse" v-model="chestPainData.emergencyBypass" type="radio" value="False">
                 <label for="emergencyBypassFalse">否</label>
                 <input id="emergencyBypassTrue" v-model="chestPainData.emergencyBypass" type="radio" value="True">
                 <label for="emergencyBypassTrue">是</label>
               </div>
               <div class="form-row-item">
-                <label>绕行CCU <span style="color: red;">*</span>：</label>
+                <label>绕行CCU：</label>
                 <input id="ccuBypassFalse" v-model="chestPainData.ccuBypass" type="radio" value="False">
                 <label for="ccuBypassFalse">否</label>
                 <input id="ccuBypassTrue" v-model="chestPainData.ccuBypass" type="radio" value="True">
@@ -1406,7 +1366,7 @@
             <div class="form-row">
 
               <div class="form-row-item">
-                <label>抗血小板治疗 <span style="color: red;">*</span>：</label>
+                <label>抗血小板治疗：</label>
                 <input id="antiplateletFalse" v-model="chestPainData.antiplateletTreatment" type="radio" value="False">
                 <label for="antiplateletFalse">否</label>
                 <input id="antiplateletTrue" v-model="chestPainData.antiplateletTreatment" type="radio" value="True">
@@ -1454,7 +1414,7 @@
             </div>
 
             <div class="form-row">
-              <label>抗凝 <span style="color: red;">*</span>：</label>
+              <label>抗凝：</label>
               <div class="form-row-item">
                 <input id="anticoagulationFalse" v-model="chestPainData.anticoagulation" type="radio" value="False">
                 <label for="anticoagulationFalse">否</label>
@@ -1492,7 +1452,7 @@
             </div>
 
             <div class="form-row">
-              <label>他汀治疗 <span style="color: red;">*</span>：</label>
+              <label>他汀治疗：</label>
               <div class="form-row-item">
                 <input id="statinFalse" v-model="chestPainData.statinTreatment" type="radio" value="False">
                 <label for="statinFalse">否</label>
@@ -1502,7 +1462,7 @@
             </div>
 
             <div class="form-row">
-              <label>β受体阻滞剂 <span style="color: red;">*</span>：</label>
+              <label>β受体阻滞剂：</label>
               <div class="form-row-item">
                 <input id="betaBlockerFalse" v-model="chestPainData.betaBlocker" type="radio" value="False">
                 <label for="betaBlockerFalse">否</label>
@@ -1580,18 +1540,18 @@
             </div>
 
             <div class="form-row">
-              <label>处理策略 <span style="color: red;">*</span>：</label>
+              <label>处理策略：</label>
 
-              <input id="conservative" v-model="chestPainData.treatmentStrategyNstemi" type="radio" value="保守治疗">
+              <input id="conservative" v-model="chestPainData.treatmentStrategy" type="radio" value="保守治疗">
               <span for="conservative">保守治疗(仅药物治疗)</span>
 
-              <input id="invasive" v-model="chestPainData.treatmentStrategyNstemi" type="radio" value="侵入性策略">
+              <input id="invasive" v-model="chestPainData.treatmentStrategy" type="radio" value="侵入性策略">
               <span for="invasive">侵入性策略</span>
 
             </div>
-            <div v-if="chestPainData.treatmentStrategyNstemi === '侵入性策略'">
+            <div v-if="chestPainData.treatmentStrategy === '侵入性策略'">
               <div class="form-row">
-                <label>侵入性策略：<span style="color: red;">*</span></label>
+                <label>侵入性策略：</label>
 
                 <input id="emergencyIntervention" v-model="chestPainData.invasiveStrategy" type="radio" value="紧急介入治疗">
                 <span for="emergencyIntervention">紧急介入治疗</span>
@@ -1604,6 +1564,7 @@
 
                 <input id="scheduledIntervention" v-model="chestPainData.invasiveStrategy" type="radio" value="择期介入治疗">
                 <span for="scheduledIntervention">择期介入治疗</span>
+
                 <input id="CABG" v-model="chestPainData.invasiveStrategy" type="radio" value="CABG">
                 <span for="CABG">CABG</span>
 
@@ -1616,25 +1577,25 @@
                     <input v-model="chestPainData.decidingDoctor" type="text" placeholder="输入医生姓名">
                   </div>
                   <div class="form-row-item">
-                    <label>决定介入手术时间 <span style="color: red;">*</span>：</label>
+                    <label>决定介入手术时间：</label>
                     <input v-model="chestPainData.interventionDecisionTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'interventionDecisionTime')">
                   </div>
                 </div>
 
                 <div class="form-row">
                   <div class="form-row-item">
-                    <label>启动导管室时间 <span style="color: red;">*</span>：</label>
+                    <label>启动导管室时间：</label>
                     <input v-model="chestPainData.cathLabStartTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'cathLabStartTime')">
                   </div>
                   <div class="form-row-item">
-                    <label>开始知情同意时间 <span style="color: red;">*</span>：</label>
+                    <label>开始知情同意时间：</label>
                     <input v-model="chestPainData.informedConsentStartTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'informedConsentStartTime')">
                   </div>
 
                 </div>
                 <div class="form-row">
                   <div class="form-row-item">
-                    <label>签署知情同意时间 <span style="color: red;">*</span>：</label>
+                    <label>签署知情同意时间：</label>
                     <input v-model="chestPainData.informedConsentSignatureTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'informedConsentSignatureTime')">
                   </div>
                 </div>
@@ -1657,7 +1618,7 @@
           <div v-if="chestPainData.diagFalsesis === 'UA'">
             <div class="form-row">
               <div class="form-row-item">
-                <label>初步诊断时间 <span style="color: red;">*</span>：</label>
+                <label>初步诊断时间：</label>
                 <input v-model="chestPainData.diagFalsesisTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'diagFalsesisTime')">
               </div>
               <div class="form-row-item">
@@ -1667,7 +1628,7 @@
             </div>
 
             <div class="form-row">
-              <label>心功能分级 <span style="color: red;">*</span>：</label>
+              <label>心功能分级：</label>
               <input id="classI" v-model="chestPainData.heartFunctionClass" type="radio" value="I级(FalseCHF)">
               <span for="classI">I级(FalseCHF)</span>
               <input id="classII" v-model="chestPainData.heartFunctionClass" type="radio" value="II级(ralesand/orJVD)">
@@ -1681,14 +1642,14 @@
             <div class="form-row">
 
               <div class="form-row-item">
-                <label>绕行急诊 <span style="color: red;">*</span>:</label>
+                <label>绕行急诊:</label>
                 <input id="emergencyBypassFalse" v-model="chestPainData.emergencyBypass" type="radio" value="False">
                 <label for="emergencyBypassFalse">否</label>
                 <input id="emergencyBypassTrue" v-model="chestPainData.emergencyBypass" type="radio" value="True">
                 <label for="emergencyBypassTrue">是</label>
               </div>
               <div class="form-row-item">
-                <label>绕行CCU <span style="color: red;">*</span>：</label>
+                <label>绕行CCU：</label>
                 <input id="ccuBypassFalse" v-model="chestPainData.ccuBypass" type="radio" value="False">
                 <label for="ccuBypassFalse">否</label>
                 <input id="ccuBypassTrue" v-model="chestPainData.ccuBypass" type="radio" value="True">
@@ -1700,7 +1661,7 @@
             <div class="form-row">
 
               <div class="form-row-item">
-                <label>抗血小板治疗 <span style="color: red;">*</span>：</label>
+                <label>抗血小板治疗：</label>
                 <input id="antiplateletFalse" v-model="chestPainData.antiplateletTreatment" type="radio" value="False">
                 <label for="antiplateletFalse">否</label>
                 <input id="antiplateletTrue" v-model="chestPainData.antiplateletTreatment" type="radio" value="True">
@@ -1750,7 +1711,7 @@
             <div class="form-row">
 
               <div class="form-row-item">
-                <label>抗凝 <span style="color: red;">*</span>：</label>
+                <label>抗凝：</label>
                 <input id="anticoagulationFalse" v-model="chestPainData.anticoagulation" type="radio" value="False">
                 <label for="anticoagulationFalse">否</label>
                 <input id="anticoagulationTrue" v-model="chestPainData.anticoagulation" type="radio" value="True">
@@ -1788,7 +1749,7 @@
             </div>
 
             <div class="form-row">
-              <label>他汀治疗 <span style="color: red;">*</span>：</label>
+              <label>他汀治疗：</label>
               <div class="form-row-item">
                 <input id="statinFalse" v-model="chestPainData.statinTreatment" type="radio" value="False">
                 <label for="statinFalse">否</label>
@@ -1798,7 +1759,7 @@
             </div>
 
             <div class="form-row">
-              <label>β受体阻滞剂 <span style="color: red;">*</span>：</label>
+              <label>β受体阻滞剂：</label>
               <div class="form-row-item">
                 <input id="betaBlockerFalse" v-model="chestPainData.betaBlocker" type="radio" value="False">
                 <label for="betaBlockerFalse">否</label>
@@ -1876,18 +1837,18 @@
             </div>
 
             <div class="form-row">
-              <label>处理策略 <span style="color: red;">*</span>：</label>
+              <label>处理策略：</label>
 
-              <input id="conservative" v-model="chestPainData.treatmentStrategyNstemi" type="radio" value="保守治疗">
+              <input id="conservative" v-model="chestPainData.treatmentStrategy" type="radio" value="保守治疗">
               <label for="conservative">保守治疗(仅药物治疗)</label>
 
-              <input id="invasive" v-model="chestPainData.treatmentStrategyNstemi" type="radio" value="侵入性策略">
+              <input id="invasive" v-model="chestPainData.treatmentStrategy" type="radio" value="侵入性策略">
               <label for="invasive">侵入性策略</label>
 
             </div>
-            <div v-if="chestPainData.treatmentStrategyNstemi === '侵入性策略'">
+            <div v-if="chestPainData.treatmentStrategy === '侵入性策略'">
               <div class="form-row">
-                <label>侵入性策略 <span style="color: red;">*</span>：</label>
+                <label>侵入性策略：</label>
 
                 <input id="emergencyIntervention" v-model="chestPainData.invasiveStrategy" type="radio" value="紧急介入治疗">
                 <label for="emergencyIntervention">紧急介入治疗</label>
@@ -1913,25 +1874,25 @@
                     <input v-model="chestPainData.decidingDoctor" type="text" placeholder="输入医生姓名">
                   </div>
                   <div class="form-row-item">
-                    <label>决定介入手术时间 <span style="color: red;">*</span>：</label>
+                    <label>决定介入手术时间：</label>
                     <input v-model="chestPainData.interventionDecisionTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'interventionDecisionTime')">
                   </div>
                 </div>
 
                 <div class="form-row">
                   <div class="form-row-item">
-                    <label>启动导管室时间 <span style="color: red;">*</span>：</label>
+                    <label>启动导管室时间：</label>
                     <input v-model="chestPainData.cathLabStartTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'cathLabStartTime')">
                   </div>
                   <div class="form-row-item">
-                    <label>开始知情同意时间 <span style="color: red;">*</span>：</label>
+                    <label>开始知情同意时间：</label>
                     <input v-model="chestPainData.informedConsentStartTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'informedConsentStartTime')">
                   </div>
 
                 </div>
                 <div class="form-row">
                   <div class="form-row-item">
-                    <label>签署知情同意时间 <span style="color: red;">*</span>：</label>
+                    <label>签署知情同意时间：</label>
                     <input v-model="chestPainData.informedConsentSignatureTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'informedConsentSignatureTime')">
                   </div>
                 </div>
@@ -1940,7 +1901,7 @@
               <div v-if="chestPainData.invasiveStrategy === '24H内介入治疗'">
                 <div class="form-row">
                   <div class="form-row-item">
-                    <label>实际介入治疗时间 <span style="color: red;">*</span>：</label>
+                    <label>实际介入治疗时间：</label>
                     <input v-model="chestPainData.actualInterventionTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'actualInterventionTime')">
                   </div>
                 </div>
@@ -1954,7 +1915,7 @@
           <div v-if="chestPainData.diagFalsesis === '主动脉夹层'">
             <div class="form-row">
               <div class="form-row-item">
-                <label>初步诊断时间 <span style="color: red;">*</span>：</label>
+                <label>初步诊断时间：</label>
                 <input v-model="chestPainData.aorticDissectionDiagFalsesisTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'aorticDissectionDiagFalsesisTime')">
               </div>
               <div class="form-row-item">
@@ -1963,7 +1924,7 @@
               </div>
             </div>
             <div class="form-row">
-              <label>影像学检查 <span style="color: red;">*</span>：</label>
+              <label>影像学检查：</label>
               <input id="ctEmergency" v-model="chestPainData.aorticDissectionImaging" type="radio" value="急诊CT">
               <label for="ctEmergency">急诊CT</label>
               <input id="ultrasound" v-model="chestPainData.aorticDissectionImaging" type="radio" value="彩超">
@@ -1976,11 +1937,11 @@
             <div v-if="chestPainData.aorticDissectionImaging==='急诊CT'">
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>通知CT室时间 <span style="color: red;">*</span>：</label>
+                  <label>通知CT室时间：</label>
                   <input v-model="chestPainData.ctFalsetificationTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'ctFalsetificationTime')">
                 </div>
                 <div class="form-row-item">
-                  <label>CT室完成准备 <span style="color: red;">*</span>：</label>
+                  <label>CT室完成准备：</label>
                   <input v-model="chestPainData.ctPreparationTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'ctPreparationTime')">
                 </div>
               </div>
@@ -1998,17 +1959,17 @@
             <div v-if="chestPainData.aorticDissectionImaging==='彩超'">
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>通知彩超室时间 <span style="color: red;">*</span>：</label>
+                  <label>通知彩超室时间：</label>
                   <input v-model="chestPainData.ultrasoundFalsetificationTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'ultrasoundFalsetificationTime')">
                 </div>
                 <div class="form-row-item">
-                  <label>彩超检查时间 <span style="color: red;">*</span>：</label>
+                  <label>彩超检查时间：</label>
                   <input v-model="chestPainData.ultrasoundExamTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'ultrasoundExamTime')">
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>彩超出结果时间 <span style="color: red;">*</span>：</label>
+                  <label>彩超出结果时间：</label>
                   <input v-model="chestPainData.ultrasoundResultTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'ultrasoundResultTime')">
                 </div>
 
@@ -2028,14 +1989,14 @@
 
 
             <div class="form-row">
-              <label>夹层类型 <span style="color: red;">*</span>：</label>
+              <label>夹层类型：</label>
               <input id="typeA" v-model="chestPainData.aorticDissectionType" type="radio" value="A型">
               <label for="typeA">A型</label>
               <input id="typeB" v-model="chestPainData.aorticDissectionType" type="radio" value="B型">
               <label for="typeB">B型</label>
             </div>
             <div class="form-row">
-              <label>治疗策略 <span style="color: red;">*</span>：</label>
+              <label>治疗策略：</label>
               <input id="emergencyIntervention" v-model="chestPainData.treatmentStrategy" type="radio" value="紧急介入治疗">
               <span for="emergencyIntervention">紧急介入治疗</span>
               <input id="scheduledIntervention" v-model="chestPainData.treatmentStrategy" type="radio" value="择期介入治疗">
@@ -2052,7 +2013,7 @@
           <div v-if="chestPainData.diagFalsesis === '肺动脉栓塞'">
             <div class="form-row">
               <div class="form-row-item">
-                <label>初步诊断时间 <span style="color: red;">*</span>：</label>
+                <label>初步诊断时间：</label>
                 <input v-model="chestPainData.pulmonaryEmbolismDiagFalsesisTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'pulmonaryEmbolismDiagFalsesisTime')">
               </div>
               <div class="form-row-item">
@@ -2061,7 +2022,7 @@
               </div>
             </div>
             <div class="form-row">
-              <label>影像学检查 <span style="color: red;">*</span>：</label>
+              <label>影像学检查：</label>
               <input id="ctEmergencyPE" v-model="chestPainData.pulmonaryEmbolismImaging" type="radio" value="急诊CT">
               <label for="ctEmergencyPE">急诊CT</label>
               <input id="FalsetDonePE" v-model="chestPainData.pulmonaryEmbolismImaging" type="radio" value="未做">
@@ -2070,11 +2031,11 @@
             <div v-if="chestPainData.pulmonaryEmbolismImaging==='急诊CT'">
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>通知CT室时间 <span style="color: red;">*</span>：</label>
+                  <label>通知CT室时间：</label>
                   <input v-model="chestPainData.ctFalsetificationTimePE" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'ctFalsetificationTimePE')">
                 </div>
                 <div class="form-row-item">
-                  <label>CT室完成准备 <span style="color: red;">*</span>：</label>
+                  <label>CT室完成准备：</label>
                   <input v-model="chestPainData.ctPreparationTimePE" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'ctPreparationTimePE')">
                 </div>
               </div>
@@ -2105,7 +2066,7 @@
               </div>
             </div>
             <div class="form-row">
-              <label>院内溶栓治疗 <span style="color: red;">*</span>：</label>
+              <label>院内溶栓治疗：</label>
               <input id="thrombolysisScreeningSuitable" v-model="chestPainData.thrombolysisScreening" type="radio" value="合适">
               <label for="thrombolysisScreeningSuitable">合适</label>
               <input id="thrombolysisScreeningUnsuitable" v-model="chestPainData.thrombolysisScreening" type="radio" value="不合适">
@@ -2114,7 +2075,7 @@
               <label for="thrombolysisScreeningFalsetScreened">未筛查</label>
             </div>
             <div class="form-row">
-              <label>溶栓治疗 <span style="color: red;">*</span>：</label>
+              <label>溶栓治疗：</label>
               <input id="thrombolysisTrue" v-model="chestPainData.thrombolysisTreatment" type="radio" value="有">
               <label for="thrombolysisTrue">有</label>
               <input id="thrombolysisFalse" v-model="chestPainData.thrombolysisTreatment" type="radio" value="无">
@@ -2125,7 +2086,7 @@
           <div v-if="chestPainData.diagFalsesis === '非ACS心源性胸痛'">
             <div class="form-row">
               <div class="form-row-item">
-                <label>初步诊断时间 <span style="color: red;">*</span>：</label>
+                <label>初步诊断时间：</label>
                 <input v-model="chestPainData.FalsenACSChestPainDiagFalsesisTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'FalsenACSChestPainDiagFalsesisTime')">
               </div>
               <div class="form-row-item">
@@ -2134,7 +2095,7 @@
               </div>
             </div>
             <div class="form-row">
-              <label>非ACS心源性胸痛类型 <span style="color: red;">*</span>：</label>
+              <label>非ACS心源性胸痛类型：</label>
               <input id="arrhythmia" v-model="chestPainData.FalsenACSChestPainType" type="radio" value="心律失常">
               <span for="arrhythmia">心律失常</span>
               <input id="dilatedCardiomyopathy" v-model="chestPainData.FalsenACSChestPainType" type="radio" value="扩张性心肌病">
@@ -2175,7 +2136,7 @@
               <span for="myocardialBridge">心肌桥</span>
             </div>
             <div class="form-row">
-              <label>处理措施 <span style="color: red;">*</span>：</label>
+              <label>处理措施：</label>
               <input id="hospitalization" v-model="chestPainData.FalsenACSChestPainTreatment" type="radio" value="收治入院">
               <label for="hospitalization">收治入院</label>
               <input id="emergencyObservation" v-model="chestPainData.FalsenACSChestPainTreatment" type="radio" value="急诊留观">
@@ -2194,7 +2155,7 @@
           <div v-if="chestPainData.diagFalsesis === '其它非心源性胸痛'">
             <div class="form-row">
               <div class="form-row-item">
-                <label>初步诊断时间 <span style="color: red;">*</span>：</label>
+                <label>初步诊断时间：</label>
                 <input v-model="chestPainData.otherFalsenCardiacChestPainDiagFalsesisTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'otherFalsenCardiacChestPainDiagFalsesisTime')">
               </div>
               <div class="form-row-item">
@@ -2203,7 +2164,7 @@
               </div>
             </div>
             <div class="form-row">
-              <label>其它非心源性胸痛类型 <span style="color: red;">*</span>：</label>
+              <label>其它非心源性胸痛类型：</label>
               <input id="respiratorySystem" v-model="chestPainData.otherFalsenCardiacChestPainType" type="radio" value="呼吸系统病">
               <label for="respiratorySystem">呼吸系统病</label>
               <input id="digestiveSystem" v-model="chestPainData.otherFalsenCardiacChestPainType" type="radio" value="消化系统病">
@@ -2220,7 +2181,7 @@
               <label for="other">其他</label>
             </div>
             <div class="form-row">
-              <label>处理措施 <span style="color: red;">*</span>：</label>
+              <label>处理措施：</label>
               <input id="hospitalizatioFalsether" v-model="chestPainData.otherFalsenCardiacChestPainTreatment" type="radio" value="收治入院">
               <label for="hospitalizatioFalsether">收治入院</label>
               <input id="emergencyObservatioFalsether" v-model="chestPainData.otherFalsenCardiacChestPainTreatment" type="radio" value="急诊留观">
@@ -2239,7 +2200,7 @@
           <div v-if="chestPainData.diagFalsesis === '待查'">
             <div class="form-row">
               <div class="form-row-item">
-                <label>初步诊断时间 <span style="color: red;">*</span>：</label>
+                <label>初步诊断时间：</label>
                 <input v-model="chestPainData.pendingDiagFalsesisTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(chestPainData, 'pendingDiagFalsesisTime')">
               </div>
               <div class="form-row-item">
@@ -2248,7 +2209,7 @@
               </div>
             </div>
             <div class="form-row">
-              <label>处理措施 <span style="color: red;">*</span>：</label>
+              <label>处理措施：</label>
               <input id="hospitalizationPending" v-model="chestPainData.pendingTreatment" type="radio" value="收治入院">
               <label for="hospitalizationPending">收治入院</label>
               <input id="emergencyObservationPending" v-model="chestPainData.pendingTreatment" type="radio" value="急诊留观">
@@ -2274,12 +2235,12 @@
         </div>
       </div>
 
-      <div v-show="currentModule === 'outcome'" class="form-section">
+      <div v-if="currentModule === 'outcome'" class="form-section">
         <h3>转归</h3>
         <div class="module">
           <h3>出院基本信息</h3>
           <div class="form-row">
-            <label for="dischargeDiagFalsesis">出院诊断 <span style="color: red;">*</span>：</label>
+            <label for="dischargeDiagFalsesis">出院诊断：</label>
             <input id="dischargeDiagFalsesisSTEMI" v-model="outcomeData.dischargeDiagFalsesis" type="radio" value="STEMI">
             <span for="dischargeDiagFalsesisSTEMI">STEMI</span>
             <input id="dischargeDiagFalsesisNSTEMI" v-model="outcomeData.dischargeDiagFalsesis" type="radio" value="NSTEMI">
@@ -2304,7 +2265,7 @@
           <div />
           <div class="form-row">
             <div class="form-row-item">
-              <label for="confirmedDate">确诊时间 <span style="color: red;">*</span>：</label>
+              <label for="confirmedDate">确诊时间：</label>
               <input id="confirmedDate" v-model="outcomeData.confirmedDate" type="datetime-local" :max="maxDateTime" @change="validateTime(chestPainData, 'confirmedDate')">
             </div>
           </div>
@@ -2312,7 +2273,7 @@
           <div v-if="['STEMI', 'NSTEMI', 'UA'].includes(outcomeData.dischargeDiagFalsesis)">
             <div class="form-row">
               <div class="form-row-item">
-                <label>院内新发心力衰竭 <span style="color: red;">*</span>：</label>
+                <label>院内新发心力衰竭：</label>
                 <input id="heartFailureFalse" v-model="outcomeData.newHeartFailure" type="radio" value="False">
                 <label for="heartFailureFalse">否</label>
                 <input id="heartFailureTrue" v-model="outcomeData.newHeartFailure" type="radio" value="True">
@@ -2320,7 +2281,7 @@
               </div>
             </div>
             <div class="form-row">
-              <label>合并症 <span style="color: red;">*</span>：</label>
+              <label>合并症：</label>
               <input id="shock" v-model="outcomeData.comorbidities" type="radio" value="休克">
               <label for="shock">休克</label>
               <input id="mechanicalComplication" v-model="outcomeData.comorbidities" type="radio" value="机械性并发症">
@@ -2349,14 +2310,14 @@
             <label>危险因素：</label>
             <div class="form-row">
               <div class="form-row-item">
-                <label>高血压 <span style="color: red;">*</span>：</label>
+                <label>高血压：</label>
                 <input id="hypertensionFalse" v-model="outcomeData.hypertension" type="radio" value="False">
                 <label for="hypertensionFalse">否</label>
                 <input id="hypertensionTrue" v-model="outcomeData.hypertension" type="radio" value="True">
                 <label for="hypertensionTrue">是</label>
               </div>
               <div class="form-row-item">
-                <label>高脂血症 <span style="color: red;">*</span>：</label>
+                <label>高脂血症：</label>
                 <input id="hyperlipidemiaFalse" v-model="outcomeData.hyperlipidemia" type="radio" value="False">
                 <label for="hyperlipidemiaFalse">否</label>
                 <input id="hyperlipidemiaTrue" v-model="outcomeData.hyperlipidemia" type="radio" value="True">
@@ -2365,14 +2326,14 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>糖尿病 <span style="color: red;">*</span>：</label>
+                <label>糖尿病：</label>
                 <input id="diabetesFalse" v-model="outcomeData.diabetes" type="radio" value="False">
                 <label for="diabetesFalse">否</label>
                 <input id="diabetesTrue" v-model="outcomeData.diabetes" type="radio" value="True">
                 <label for="diabetesTrue">是</label>
               </div>
               <div class="form-row-item">
-                <label>吸烟 <span style="color: red;">*</span>：</label>
+                <label>吸烟：</label>
                 <input id="smokingFalse" v-model="outcomeData.smoking" type="radio" value="False">
                 <label for="smokingFalse">否</label>
                 <input id="smokingTrue" v-model="outcomeData.smoking" type="radio" value="True">
@@ -2381,14 +2342,14 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>肥胖 <span style="color: red;">*</span>：</label>
+                <label>肥胖：</label>
                 <input id="obesityFalse" v-model="outcomeData.obesity" type="radio" value="False">
                 <label for="obesityFalse">否</label>
                 <input id="obesityTrue" v-model="outcomeData.obesity" type="radio" value="True">
                 <label for="obesityTrue">是</label>
               </div>
               <div class="form-row-item">
-                <label>早发CVD家族史 <span style="color: red;">*</span>：</label>
+                <label>早发CVD家族史：</label>
                 <input id="familyHistoryFalse" v-model="outcomeData.familyHistory" type="radio" value="False">
                 <label for="familyHistoryFalse">否</label>
                 <input id="familyHistoryTrue" v-model="outcomeData.familyHistory" type="radio" value="True">
@@ -2401,14 +2362,14 @@
             <label>合并疾病：</label>
             <div class="form-row">
               <div class="form-row-item">
-                <label>冠心病 <span style="color: red;">*</span>：</label>
+                <label>冠心病：</label>
                 <input id="coronaryHeartDiseaseFalse" v-model="outcomeData.coronaryHeartDisease" type="radio" value="False">
                 <label for="coronaryHeartDiseaseFalse">否</label>
                 <input id="coronaryHeartDiseaseTrue" v-model="outcomeData.coronaryHeartDisease" type="radio" value="True">
                 <label for="coronaryHeartDiseaseTrue">是</label>
               </div>
               <div v-if="outcomeData.coronaryHeartDisease === 'True'" class="form-row-item">
-                <label>血运重建史 <span style="color: red;">*</span>：</label>
+                <label>血运重建史：</label>
                 <input id="revascularizationHistoryFalse" v-model="outcomeData.revascularizationHistory" type="radio" value="False">
                 <label for="revascularizationHistoryFalse">否</label>
                 <input id="revascularizationHistoryTrue" v-model="outcomeData.revascularizationHistory" type="radio" value="True">
@@ -2417,7 +2378,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>心房颤动 <span style="color: red;">*</span>：</label>
+                <label>心房颤动：</label>
                 <input id="afFalse" v-model="outcomeData.af" type="radio" value="False">
                 <label for="afFalse">否</label>
                 <input id="afTrue" v-model="outcomeData.af" type="radio" value="True">
@@ -2436,14 +2397,14 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>慢性心力衰竭 <span style="color: red;">*</span>：</label>
+                <label>慢性心力衰竭：</label>
                 <input id="chronicHeartFailureFalse" v-model="outcomeData.chronicHeartFailure" type="radio" value="False">
                 <label for="chronicHeartFailureFalse">否</label>
                 <input id="chronicHeartFailureTrue" v-model="outcomeData.chronicHeartFailure" type="radio" value="True">
                 <label for="chronicHeartFailureTrue">是</label>
               </div>
               <div class="form-row-item">
-                <label>心脏瓣膜病 <span style="color: red;">*</span>：</label>
+                <label>心脏瓣膜病：</label>
                 <input id="heartValveDiseaseFalse" v-model="outcomeData.heartValveDisease" type="radio" value="False">
                 <label for="heartValveDiseaseFalse">否</label>
                 <input id="heartValveDiseaseTrue" v-model="outcomeData.heartValveDisease" type="radio" value="True">
@@ -2452,7 +2413,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>脑血管疾病 <span style="color: red;">*</span>：</label>
+                <label>脑血管疾病：</label>
                 <input id="cerebrovascularDiseaseFalse" v-model="outcomeData.cerebrovascularDisease" type="radio" value="False">
                 <label for="cerebrovascularDiseaseFalse">否</label>
                 <input id="cerebrovascularDiseaseTrue" v-model="outcomeData.cerebrovascularDisease" type="radio" value="True">
@@ -2469,7 +2430,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>外周动脉疾病 <span style="color: red;">*</span>：</label>
+                <label>外周动脉疾病：</label>
                 <input id="peripheralArteryDiseaseFalse" v-model="outcomeData.peripheralArteryDisease" type="radio" value="False">
                 <label for="peripheralArteryDiseaseFalse">否</label>
                 <input id="peripheralArteryDiseaseTrue" v-model="outcomeData.peripheralArteryDisease" type="radio" value="True">
@@ -2478,14 +2439,14 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>主动脉瘤 <span style="color: red;">*</span>：</label>
+                <label>主动脉瘤：</label>
                 <input id="aorticAneurysmFalse" v-model="outcomeData.aorticAneurysm" type="radio" value="False">
                 <label for="aorticAneurysmFalse">否</label>
                 <input id="aorticAneurysmTrue" v-model="outcomeData.aorticAneurysm" type="radio" value="True">
                 <label for="aorticAneurysmTrue">是</label>
               </div>
               <div class="form-row-item">
-                <label>COPD <span style="color: red;">*</span>：</label>
+                <label>COPD：</label>
                 <input id="copdFalse" v-model="outcomeData.copd" type="radio" value="False">
                 <label for="copdFalse">否</label>
                 <input id="copdTrue" v-model="outcomeData.copd" type="radio" value="True">
@@ -2494,14 +2455,14 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>慢性肾病 <span style="color: red;">*</span>：</label>
+                <label>慢性肾病：</label>
                 <input id="chronicKidneyDiseaseFalse" v-model="outcomeData.chronicKidneyDisease" type="radio" value="False">
                 <label for="chronicKidneyDiseaseFalse">否</label>
                 <input id="chronicKidneyDiseaseTrue" v-model="outcomeData.chronicKidneyDisease" type="radio" value="True">
                 <label for="chronicKidneyDiseaseTrue">是</label>
               </div>
               <div class="form-row-item">
-                <label>贫血 <span style="color: red;">*</span>：</label>
+                <label>贫血：</label>
                 <input id="anemiaFalse" v-model="outcomeData.anemia" type="radio" value="False">
                 <label for="anemiaFalse">否</label>
                 <input id="anemiaTrue" v-model="outcomeData.anemia" type="radio" value="True">
@@ -2510,14 +2471,14 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>消化性溃疡 <span style="color: red;">*</span>：</label>
-                <input id="pepticUlcerFalse" v-model="outcomeData.pepticUlcer" type="radio" value="False">
+                <label>消化性溃疡：</label>
+                <<input id="pepticUlcerFalse" v-model="outcomeData.pepticUlcer" type="radio" value="False">
                 <label for="pepticUlcerFalse">否</label>
                 <input id="pepticUlcerTrue" v-model="outcomeData.pepticUlcer" type="radio" value="True">
                 <label for="pepticUlcerTrue">是</label>
               </div>
               <div class="form-row-item">
-                <label>甲状腺功能异常 <span style="color: red;">*</span>：</label>
+                <label>甲状腺功能异常：</label>
                 <input id="thyroidFunctionAbFalsermalFalse" v-model="outcomeData.thyroidFunctionAbFalsermal" type="radio" value="False">
                 <label for="thyroidFunctionAbFalsermalFalse">否</label>
                 <input id="thyroidFunctionAbFalsermalTrue" v-model="outcomeData.thyroidFunctionAbFalsermal" type="radio" value="True">
@@ -2527,7 +2488,7 @@
             <label>检查结果：</label>
             <div class="form-row">
               <div class="form-row-item">
-                <label>72h内肌钙蛋白 <span style="color: red;">*</span>：</label>
+                <label>72h内肌钙蛋白：</label>
                 <input id="troponin72hFalse" v-model="outcomeData.troponin72h" type="radio" value="False">
                 <label for="troponin72hFalse">否</label>
                 <input id="troponin72hTrue" v-model="outcomeData.troponin72h" type="radio" value="True">
@@ -2540,7 +2501,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>脑钠肽 <span style="color: red;">*</span>：</label>
+                <label>脑钠肽：</label>
                 <input id="bnp" v-model="outcomeData.bnp" type="radio" value="BNP">
                 <span for="bnp">BNP</span>
                 <input id="ntProBNP" v-model="outcomeData.bnp" type="radio" value="NT-proBNP"><!--<input type="radio" id="ntProBNP" value="NT-proBNP" v-model="outcomeData.ntProBNP" />-->
@@ -2552,7 +2513,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>总胆固醇(TC) <span style="color: red;">*</span>：</label>
+                <label>总胆固醇(TC)：</label>
                 <input id="tcFalse" v-model="outcomeData.tc" type="radio" value="False">
                 <label for="tcFalse">否</label>
                 <input id="tcTrue" v-model="outcomeData.tc" type="radio" value="True">
@@ -2565,7 +2526,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>甘油三酯(TG) <span style="color: red;">*</span>：</label>
+                <label>甘油三酯(TG)：</label>
                 <input id="tgFalse" v-model="outcomeData.tg" type="radio" value="False">
                 <label for="tgFalse">否</label>
                 <input id="tgTrue" v-model="outcomeData.tg" type="radio" value="True">
@@ -2578,7 +2539,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>高密度脂蛋白(HDL-C) <span style="color: red;">*</span>：</label>
+                <label>高密度脂蛋白(HDL-C)：</label>
                 <input id="hdlFalse" v-model="outcomeData.hdl" type="radio" value="False">
                 <label for="hdlFalse">否</label>
                 <input id="hdlTrue" v-model="outcomeData.hdl" type="radio" value="True">
@@ -2591,7 +2552,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>低密度脂蛋白(LDL-C) <span style="color: red;">*</span>：</label>
+                <label>低密度脂蛋白(LDL-C)：</label>
                 <input id="ldlFalse" v-model="outcomeData.ldl" type="radio" value="False">
                 <label for="ldlFalse">否</label>
                 <input id="ldlTrue" v-model="outcomeData.ldl" type="radio" value="True">
@@ -2604,7 +2565,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>超声心动图 <span style="color: red;">*</span>：</label>
+                <label>超声心动图：</label>
                 <input id="echoFalse" v-model="outcomeData.echo" type="radio" value="False">
                 <label for="echoFalse">否</label>
                 <input id="echoTrue" v-model="outcomeData.echo" type="radio" value="True">
@@ -2621,7 +2582,7 @@
               </div>
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>室壁瘤 <span style="color: red;">*</span>：</label>
+                  <label>室壁瘤：</label>
                   <input id="wallAneurysmFalse" v-model="outcomeData.wallAneurysm" type="radio" value="False">
                   <label for="wallAneurysmFalse">否</label>
                   <input id="wallAneurysmTrue" v-model="outcomeData.wallAneurysm" type="radio" value="True">
@@ -2630,7 +2591,7 @@
               </div>
               <div class="form-row">
                 <div class="form-row-item">
-                  <label>局部室壁活动异常 <span style="color: red;">*</span>：</label>
+                  <label>局部室壁活动异常：</label>
                   <input id="wallMotionAbFalsermalityFalse" v-model="outcomeData.wallMotionAbFalsermality" type="radio" value="False">
                   <label for="wallMotionAbFalsermalityFalse">否</label>
                   <input id="wallMotionAbFalsermalityTrue" v-model="outcomeData.wallMotionAbFalsermality" type="radio" value="True">
@@ -2642,7 +2603,7 @@
 
           <div v-if="outcomeData.dischargeDiagFalsesis === '非ACS心源性胸痛'">
             <div class="form-row">
-              <label>非ACS心源性胸痛 <span style="color: red;">*</span>：</label>
+              <label>非ACS心源性胸痛：</label>
               <input id="arrhythmia" v-model="outcomeData.FalsenACSChestPainType" type="radio" value="心律失常">
               <label for="arrhythmia">心律失常</label>
               <input id="dilatedCardiomyopathy" v-model="outcomeData.FalsenACSChestPainType" type="radio" value="扩张性心肌病">
@@ -2694,7 +2655,7 @@
 
           <div v-if="outcomeData.dischargeDiagFalsesis === '其它非心源性胸痛'">
             <div class="form-row">
-              <label>其它非心源性胸痛类型 <span style="color: red;">*</span>：</label>
+              <label>其它非心源性胸痛类型：</label>
               <input id="respiratoryDisease" v-model="outcomeData.otherFalsenCardiacChestPainType" type="radio" value="呼吸系统病">
               <label for="respiratoryDisease">呼吸系统病</label>
               <input id="digestiveDisease" v-model="outcomeData.otherFalsenCardiacChestPainType" type="radio" value="消化系统病">
@@ -2711,20 +2672,29 @@
               <label for="otherType">其他</label>
             </div>
           </div>
+
+
+          <div class="form-row">
+            <label>COVID-19：</label>
+            <input id="covidTrue" v-model="outcomeData.covid" type="radio" value="True">
+            <label for="covidTrue">是</label>
+            <input id="covidFalse" v-model="outcomeData.covid" type="radio" value="False">
+            <label for="covidFalse">否</label>
+          </div>
         </div>
 
         <!-- 住院期间用药模块 -->
         <div class="module">
           <h3>住院期间用药</h3>
           <div class="form-row">
-            <label>降糖药物 <span style="color: red;">*</span>：</label>
+            <label>降糖药物：</label>
             <input id="antidiabeticTrue" v-model="outcomeData.antidiabetic" type="radio" value="True">
             <label for="antidiabeticTrue">是</label>
             <input id="antidiabeticFalse" v-model="outcomeData.antidiabetic" type="radio" value="False">
             <label for="antidiabeticFalse">否</label>
           </div>
           <div class="form-row">
-            <label for="oralAnticoagulants">口服抗凝药物 <span style="color: red;">*</span>：</label>
+            <label for="oralAnticoagulants">口服抗凝药物：</label>
             <input id="antidiabeticTrue" v-model="outcomeData.oralAnticoagulants" type="radio" value="True">
             <label for="antidiabeticTrue">是</label>
             <input id="antidiabeticFalse" v-model="outcomeData.oralAnticoagulants" type="radio" value="False">
@@ -2732,7 +2702,7 @@
 
           </div>
           <div class="form-row">
-            <label for="lipidRegulating">调脂药物 <span style="color: red;">*</span>：</label>
+            <label for="lipidRegulating">调脂药物：</label>
             <input id="antidiabeticTrue" v-model="outcomeData.lipidRegulating" type="radio" value="True">
             <label for="antidiabeticTrue">是</label>
             <input id="antidiabeticFalse" v-model="outcomeData.lipidRegulating" type="radio" value="False">
@@ -2746,18 +2716,18 @@
           <h3>出院信息</h3>
           <div class="form-row">
             <div class="form-row-item">
-              <label for="hospitalDays">住院天数 <span style="color: red;">*</span>：</label>
+              <label for="hospitalDays">住院天数：</label>
               <input id="hospitalDays" v-model="outcomeData.hospitalDays" type="number">
             </div>
           </div>
           <div class="form-row">
             <div class="form-row-item">
-              <label for="totalCost">总费用 <span style="color: red;">*</span>：</label>
+              <label for="totalCost">总费用：</label>
               <input id="totalCost" v-model="outcomeData.totalCost" type="number">
             </div>
           </div>
           <div class="form-row">
-            <label>出院还是转归 <span style="color: red;">*</span>：</label>
+            <label>出院还是转归：</label>
             <input id="discharge" v-model="outcomeData.dischargeStatus" type="radio" value="出院">
             <label for="discharge">出院</label>
             <input id="transferHospital" v-model="outcomeData.dischargeStatus" type="radio" value="转送其他医院">
@@ -2772,13 +2742,13 @@
           <div v-if="outcomeData.dischargeStatus === '出院'">
             <div class="form-row">
               <div class="form-row-item">
-                <label>出院时间 <span style="color: red;">*</span>：</label>
+                <label>出院时间：</label>
                 <input v-model="outcomeData.dischargeTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(outcomeData, 'dischargeTime')">
               </div>
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>治疗结果 <span style="color: red;">*</span>：</label>
+                <label>治疗结果：</label>
                 <input id="cure" v-model="outcomeData.treatmentOutcome" type="radio" value="治愈">
                 <label for="cure">治愈</label>
                 <input id="improvement" v-model="outcomeData.treatmentOutcome" type="radio" value="好转">
@@ -2890,7 +2860,7 @@
           <div v-if="outcomeData.dischargeStatus === '转送其他医院'">
             <div class="form-row">
               <div class="form-row-item">
-                <label>离开本院大门时间 <span style="color: red;">*</span>：</label>
+                <label>离开本院大门时间：</label>
                 <input v-model="outcomeData.departureTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(outcomeData, 'departureTime')">
               </div>
             </div>
@@ -2910,7 +2880,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>转运PCI <span style="color: red;">*</span>：</label>
+                <label>转运PCI：</label>
                 <input id="transferPciFalse" v-model="outcomeData.transferPci" type="radio" value="False">
                 <label for="transferPciFalse">否</label>
                 <input id="transferPciTrue" v-model="outcomeData.transferPci" type="radio" value="True">
@@ -2919,7 +2889,7 @@
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>直达导管室 <span style="color: red;">*</span>：</label>
+                <label>直达导管室：</label>
                 <input id="directCathLabFalse" v-model="outcomeData.directCathLab" type="radio" value="False">
                 <label for="directCathLabFalse">否</label>
                 <input id="directCathLabTrue" v-model="outcomeData.directCathLab" type="radio" value="True">
@@ -2927,13 +2897,13 @@
 
               </div>
               <div v-if="outcomeData.directCathLab === 'True'" class="form-row-item">
-                <label>实际介入手术开始时间 <span style="color: red;">*</span></label>
+                <label>实际介入手术开始时间</label>
                 <input v-model="outcomeData.actualInterventionStartTime" type="datetime-local" placeholder="实际介入手术开始时间" :max="maxDateTime" @change="validateTime(outcomeData, 'actualInterventionStartTime')">
               </div>
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>远程心电图传输 <span style="color: red;">*</span>：</label>
+                <label>远程心电图传输：</label>
                 <input id="ecgTransmissionTrue" v-model="outcomeData.ecgTransmission" type="radio" value="传输心电图至协作单位">
                 <label for="ecgTransmissionTrue">传输心电图至协作单位(转出患者时)</label>
                 <input id="ecgTransmissionFalse" v-model="outcomeData.ecgTransmission" type="radio" value="无">
@@ -2990,13 +2960,13 @@
           <div v-if="outcomeData.dischargeStatus === '死亡'">
             <div class="form-row">
               <div class="form-row-item">
-                <label>死亡时间 <span style="color: red;">*</span>：</label>
+                <label>死亡时间：</label>
                 <input v-model="outcomeData.deathTime" type="datetime-local" placeholder="输入时间" :max="maxDateTime" @change="validateTime(outcomeData, 'deathTime')">
               </div>
             </div>
             <div class="form-row">
               <div class="form-row-item">
-                <label>死亡原因 <span style="color: red;">*</span>：</label>
+                <label>死亡原因：</label>
                 <input id="cardiacCause" v-model="outcomeData.deathCause" type="radio" value="心源性">
                 <label for="cardiacCause">心源性</label>
                 <input id="FalsenCardiacCause" v-model="outcomeData.deathCause" type="radio" value="非心源性">
@@ -3031,18 +3001,6 @@ import { API_URL } from '@/api/constants'
 export default {
   data() {
     return {
-      ocrDialog: {
-        visible: false,
-        loading: false,
-        error: '',
-        resultText: '',
-        imageBase64: '',
-        imgUrl: '',
-        progress: 0,
-        parsedData: {},
-        extraLines: [],
-        progressTimer: null
-      },
       maxDateTime: '', // 用于存储最小可选时间
       currentModule: 'emergency', // 默认显示急救模块
       formData: {
@@ -3071,7 +3029,7 @@ export default {
         detailedAddress: '',
         insuranceType: '',
         insuranceNumber: '',
-        isCriticalIllnessInsurance: '',
+        severeInsurance: '',
         symptomslevel: '',
         symptoms: [],
         source: '',
@@ -3123,7 +3081,7 @@ export default {
         ecg: '',
         ecgRemote: '',
         ecgRemoteTime: '',
-        transmissionMethod: '',
+        remoteEcgTransmissionMethod: '',
         troponin: '',
         creatinine: '',
         dDimer: '',
@@ -3139,7 +3097,7 @@ export default {
         //心电图
         whynoecg: "",
         ecgs: [
-          { time: '', file: null, fileName: '', filePreview: null, filePath: '' } // 初始化一个心电图对象
+          { time: '', file: null, fileName: '', filePreview: null } // 初始化一个心电图对象
         ],
         ecgDiagFalsesisTime: '', // 心电图诊断时间
 
@@ -3189,7 +3147,7 @@ export default {
         graceRiskStratification: '',
         reassessment: '',
         reassessmentTime: '',
-        treatmentStrategyNstemi: '',
+        treatmentStrategy: '',
         invasiveStrategy: '',
         //紧急介入治疗
         decidingDoctor: '',
@@ -3202,7 +3160,7 @@ export default {
 
         //STEMI
         reperfusion: '',
-        reperfusionMethod: '',
+        reperfusionMeasures: [],
         //decidingDoctor: '',
         //interventionDecisionTime: '',
         //cathLabStartTime: '',
@@ -3376,18 +3334,17 @@ export default {
     };
   },
   computed: {
-    ocrHasAnyParsed() {
-      return this.ocrDialog && this.ocrDialog.parsedData && Object.keys(this.ocrDialog.parsedData).length > 0
-    },
     isFormComplete() {
       return (
         this.formData.name &&
         this.formData.age &&
         this.formData.gender &&
+        this.formData.height &&
+        this.formData.weight &&
         this.formData.phone &&
+        this.formData.dob &&
         this.formData.ethnicity &&
         this.formData.caseDate
-        // 身高、体重、出生日期为选填，不影响表单完整性判断
       );
     }
   },
@@ -3402,394 +3359,8 @@ export default {
     data.setHours(data.getHours() + 8);
     this.maxDateTime= data.toISOString().slice(0, 16)
     console.log(this.maxDateTime)
-
-    // ===== OCR智能预填：读取来自ocr.vue的解析数据 =====
-    this._applyOcrPrefill()
   },
   methods: {
-
-/** ===== 智能识别：嵌入式 OCR 弹窗 ===== */
-openOcrDialog() {
-  this.ocrDialog.visible = true
-},
-closeOcrDialog() {
-  this.ocrDialog.visible = false
-},
-selectOcrFile() {
-  this.$refs.ocrFileInput && this.$refs.ocrFileInput.click()
-},
-handleOcrDrop(e) {
-  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]
-  if (file) this.handleOcrFile(file)
-},
-handleOcrUpload(e) {
-  const file = e.target.files && e.target.files[0]
-  if (file) this.handleOcrFile(file)
-  if (e.target) e.target.value = ''
-},
-fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-},
-async handleOcrFile(file) {
-  if (!file || !file.type || !file.type.startsWith('image/')) {
-    this.ocrDialog.error = '请上传图片文件'
-    return
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    this.ocrDialog.error = '图片不能超过10MB'
-    return
-  }
-
-  this.clearOcrResult(false)
-  this.ocrDialog.loading = true
-  this.ocrDialog.progress = 0
-  this.ocrDialog.progressTimer = setInterval(() => {
-    if (this.ocrDialog.progress < 85) this.ocrDialog.progress += 8
-  }, 400)
-
-  try {
-    const imageBase64 = await this.fileToBase64(file)
-    this.ocrDialog.imgUrl = imageBase64
-    this.ocrDialog.imageBase64 = imageBase64.split(',')[1]
-
-    const { sendBaiduAIRequest } = await import('@/api/constants')
-    const res = await sendBaiduAIRequest(this.ocrDialog.imageBase64)
-    const lines = res && res.words_result ? res.words_result.map(item => item.words).filter(Boolean) : []
-    this.ocrDialog.progress = 100
-
-    if (!lines.length) {
-      this.ocrDialog.error = 'OCR未返回有效内容，请检查图片清晰度'
-      return
-    }
-    this.ocrDialog.resultText = lines.join('\n')
-    this.parseOcrLines(lines)
-  } catch (err) {
-    this.ocrDialog.error = 'OCR识别失败：' + (err.message || String(err))
-  } finally {
-    clearInterval(this.ocrDialog.progressTimer)
-    this.ocrDialog.progressTimer = null
-    this.ocrDialog.loading = false
-  }
-},
-parseOcrLines(lines) {
-  const parsed = {}
-  const unmatched = []
-  const idCardReg = /^[1-9]\d{5}(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[\dX]$/i
-  const phoneReg = /1[3-9]\d{9}/
-  const dobReg = /(\d{4})[年\-./](\d{1,2})[月\-./](\d{1,2})日?/
-
-  lines.forEach(rawLine => {
-    const raw = String(rawLine || '').trim()
-    if (!raw) return
-    const compact = raw.replace(/\s/g, '')
-
-    if (!parsed.idNumber && idCardReg.test(compact)) {
-      parsed.idNumber = compact
-      parsed.idType = '1'
-      parsed.dob = `${compact.substring(6, 10)}-${compact.substring(10, 12)}-${compact.substring(12, 14)}`
-      parsed.age = String(new Date().getFullYear() - Number(compact.substring(6, 10)))
-      parsed.gender = Number(compact[16]) % 2 === 1 ? '男' : '女'
-      return
-    }
-
-    const phone = compact.match(phoneReg)
-    if (phone && !parsed.phone) {
-      parsed.phone = phone[0]
-      return
-    }
-
-    const kv = raw.match(/^(.{1,10})[：:]\s*(.+)$/)
-    if (kv) {
-      const key = kv[1].replace(/\s/g, '')
-      const val = kv[2].trim()
-      if (/姓名|名字|名称/.test(key)) { parsed.name = val; return }
-      if (/性别/.test(key)) { parsed.gender = /女/.test(val) ? '女' : (/男/.test(val) ? '男' : val); return }
-      if (/年龄|岁/.test(key)) { parsed.age = val.replace(/岁/g, '').trim(); return }
-      if (/出生|生日/.test(key)) {
-        const d = val.match(dobReg)
-        parsed.dob = d ? `${d[1]}-${d[2].padStart(2, '0')}-${d[3].padStart(2, '0')}` : val
-        return
-      }
-      if (/身份证|证件号/.test(key)) { parsed.idNumber = val.replace(/\s/g, ''); parsed.idType = '1'; return }
-      if (/电话|手机|联系电话/.test(key)) { parsed.phone = val.replace(/\s/g, ''); return }
-      if (/民族/.test(key)) { parsed.ethnicity = val; return }
-      if (/住院号|住院ID|住院编号/.test(key)) { parsed.inpatientId = val; return }
-      if (/门诊号|门诊ID|门诊编号/.test(key)) { parsed.outpatientId = val; return }
-      if (/发病|起病|症状出现/.test(key)) { parsed.onsetTime = val; return }
-      if (/详细地址|街道|具体地址/.test(key)) { parsed.detailedAddress = val; return }
-      if (/省市区|发病地址|地址/.test(key)) { parsed.address = val; return }
-      if (/身高/.test(key)) { parsed.height = val.replace(/cm|厘米/ig, '').trim(); return }
-      if (/体重/.test(key)) { parsed.weight = val.replace(/kg|公斤/ig, '').trim(); return }
-      if (/职业/.test(key)) { parsed.occupation = val; return }
-    }
-
-    const dob = raw.match(dobReg)
-    if (dob && !parsed.dob) {
-      parsed.dob = `${dob[1]}-${dob[2].padStart(2, '0')}-${dob[3].padStart(2, '0')}`
-      return
-    }
-    if (/^[\u4e00-\u9fa5]{2,4}$/.test(raw) && !/汉族|满族|回族|壮族|男性|女性|医院|科室/.test(raw) && !parsed.name) {
-      parsed.name = raw
-      return
-    }
-    if (/族$/.test(raw) && raw.length <= 4 && !parsed.ethnicity) {
-      parsed.ethnicity = raw
-      return
-    }
-    unmatched.push(raw)
-  })
-
-  this.ocrDialog.parsedData = parsed
-  this.ocrDialog.extraLines = unmatched.slice(0, 10)
-},
-clearOcrResult(clearImage = true) {
-  this.ocrDialog.error = ''
-  this.ocrDialog.resultText = ''
-  this.ocrDialog.progress = 0
-  this.ocrDialog.parsedData = {}
-  this.ocrDialog.extraLines = []
-  if (clearImage) {
-    this.ocrDialog.imageBase64 = ''
-    this.ocrDialog.imgUrl = ''
-  }
-},
-applyOcrParsedData() {
-  if (!this.ocrHasAnyParsed) {
-    this.ocrDialog.error = '暂无可填入的解析字段'
-    return
-  }
-  sessionStorage.setItem('ocr_prefill_data', JSON.stringify(this.ocrDialog.parsedData))
-  sessionStorage.setItem('ocr_prefill_ts', String(Date.now()))
-  this._applyOcrPrefill()
-  this.closeOcrDialog()
-},
-
-/** ===== OCR预填：从sessionStorage读取ocr.vue解析的数据自动填入表单 ===== */
-_applyOcrPrefill() {
-  try {
-    const raw = sessionStorage.getItem('ocr_prefill_data')
-    const ts = Number(sessionStorage.getItem('ocr_prefill_ts') || 0)
-    // 超过5分钟的预填数据丢弃
-    if (!raw || (Date.now() - ts) > 5 * 60 * 1000) return
-
-    const d = JSON.parse(raw)
-    if (!d || typeof d !== 'object') return
-
-    // 清除已使用的预填数据
-    sessionStorage.removeItem('ocr_prefill_data')
-    sessionStorage.removeItem('ocr_prefill_ts')
-
-    // 映射到 formData（基本信息）
-    const fmap = {
-      name: 'name',
-      gender: 'gender',
-      age: 'age',
-      dob: 'dob',
-      idType: 'idType',
-      idNumber: 'idNumber',
-      phone: 'phone',
-      ethnicity: 'ethnicity',
-      height: 'height',
-      weight: 'weight',
-      maritalStatus: 'maritalStatus',
-      occupation: 'occupation',
-      education: 'education'
-    }
-    let filled = 0
-    for (const [ocrKey, formKey] of Object.entries(fmap)) {
-      if (d[ocrKey] !== undefined && d[ocrKey] !== '') {
-        this.formData[formKey] = d[ocrKey]
-        filled++
-      }
-    }
-
-    // 映射到 emergencyData（急救信息）
-    const emap = {
-      inpatientId: 'inpatientId',
-      outpatientId: 'outpatientId',
-      address: 'address',
-      detailedAddress: 'detailedAddress',
-      onsetTime: 'onsetTime',
-      insuranceType: 'insuranceType',
-      insuranceNumber: 'insuranceNumber',
-      isCriticalIllnessInsurance: 'isCriticalIllnessInsurance',
-      source: 'source'
-    }
-    for (const [ocrKey, emKey] of Object.entries(emap)) {
-      if (d[ocrKey] !== undefined && d[ocrKey] !== '') {
-        this.emergencyData[emKey] = d[ocrKey]
-        filled++
-      }
-    }
-
-    // 症状复选框（数组合并）
-    if (Array.isArray(d.symptoms) && d.symptoms.length > 0) {
-      this.emergencyData.symptoms = [...new Set([...(this.emergencyData.symptoms || []), ...d.symptoms])]
-      filled++
-    }
-
-    if (filled > 0) {
-      this.$nextTick(() => {
-        this.$message({
-          message: `OCR智能预填：已自动填入 ${filled} 个字段，请核对后提交`,
-          type: 'success',
-          duration: 4000,
-          showClose: true
-        })
-      })
-    }
-  } catch (e) {
-    console.warn('OCR预填数据读取失败:', e)
-  }
-},
-
-/** ===== 动态必填校验（基于既有红星 + 可见性） ===== */
-isElementVisible(el) {
-  if (!el) return false;
-  const style = window.getComputedStyle(el);
-  if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') === 0) return false;
-  const rects = el.getClientRects();
-  if (!rects || rects.length === 0) return false;
-  // 祖先 display:none 也不可见
-  let cur = el;
-  while (cur) {
-    const cs = window.getComputedStyle(cur);
-    if (cs.display === 'none') return false;
-    cur = cur.parentElement;
-  }
-  return true;
-},
-_collectControls(container) {
-  const ctrls = Array.from(container.querySelectorAll('input, select, textarea'));
-  return ctrls.filter(el => el.type !== 'file' && !el.disabled && !el.readOnly && this.isElementVisible(el));
-},
-_isFilled(ctrls) {
-  if (!ctrls || ctrls.length === 0) return true;
-  const radios = ctrls.filter(el => el.type === 'radio');
-  const checks = ctrls.filter(el => el.type === 'checkbox');
-  if (radios.length > 0) return radios.some(el => el.checked);
-  if (checks.length > 0) return checks.some(el => el.checked);
-  return ctrls.every(el => el.tagName === 'SELECT' ? (el.value !== '' && el.value != null) : ((el.value || '').trim() !== ''));
-},
-_focusAndScroll(container) {
-  if (!container) return;
-  const t = container.querySelector('input, select, textarea') || container;
-  if (t && typeof t.focus === 'function') t.focus();
-  const y = container.getBoundingClientRect().top + window.pageYOffset - 80;
-  window.scrollTo({ top: y, behavior: 'smooth' });
-  container.classList.add('shake-error');
-  setTimeout(() => container.classList.remove('shake-error'), 1200);
-},
-validateRequiredByStars() {
-  try {
-    const root = this.$refs.mainForm || this.$el;
-    if (!root) return true;
-    // 兼容：.red-star / 行内红色 * / label/th 直接包含 *
-    const starNodes = Array.from(root.querySelectorAll('.red-star, label span[style*=\"red\"], th span[style*=\"red\"]'))
-      .filter(n => this.isElementVisible(n));
-    const textStars = Array.from(root.querySelectorAll('label, th'))
-      .filter(n => this.isElementVisible(n) && n.textContent && n.textContent.includes('*'));
-    const allStars = Array.from(new Set(starNodes.concat(textStars)));
-    for (const star of allStars) {
-      // 选择最接近的行容器
-      let row = star.closest('.form-row') || star.closest('.form-row-item') || star.closest('tr') || star.closest('div, td, th');
-      if (!row || !this.isElementVisible(row)) continue;
-      const ctrls = this._collectControls(row);
-      if (!this._isFilled(ctrls)) {
-        let labelText = '';
-        const label = row.querySelector('label, th');
-        if (label) labelText = (label.innerText || label.textContent || '').replace('*', '').trim();
-        if (!labelText) labelText = '有未填写的必填项';
-        if (this.showMessage) this.showMessage(`${labelText} 为必填项`, 'error');
-        else alert(`${labelText} 为必填项`);
-        this._focusAndScroll(row);
-        return false; // 拦截提交
-      }
-    }
-    return true;
-  } catch (e) {
-    console.error('validateRequiredByStars error:', e);
-    return true; // 发生异常不阻断提交，避免影响使用
-  }
-},
-
-
-    // === 通用提示窗口 ===
-    showMessage(msg, type = 'info') {
-      if (this.$message) {
-        if (type === 'success' && this.$message.success) return this.$message.success(msg);
-        if (type === 'warning' && this.$message.warning) return this.$message.warning(msg);
-        if (type === 'error' && this.$message.error) return this.$message.error(msg);
-        return this.$message(msg);
-      }
-      alert(msg);
-    },
-
-    // === 姓名校验：只允许中英文/空格/间隔点“·”，不允许数字与符号 ===
-    validateName(name) {
-      if (!name) return false;
-      const re = /^[\p{L}\u4e00-\u9fa5·\s]+$/u;
-      return re.test(name);
-    },
-
-    // === 手机号校验：大陆 11 位，以 1 开头，第二位 3-9 ===
-    validatePhone(phone) {
-      const re = /^1[3-9]\d{9}$/;
-      return re.test(String(phone || ''));
-    },
-
-    // === 根据出生日期计算年龄（按当前日期精确计算）===
-    computeAgeFromDob(dobStr) {
-      if (!dobStr) return null;
-      const today = new Date();
-      const dob = new Date(dobStr);
-      if (isNaN(dob.getTime())) return null;
-      let age = today.getFullYear() - dob.getFullYear();
-      const m = today.getMonth() - dob.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-      return age;
-    },
-
-    // === 二代身份证合法性校验与信息解析 ===
-    // 返回 { valid, reason?, birth: 'YYYY-MM-DD', gender: '男'|'女', age }
-    parseIdCard(id) {
-      const code = String(id || '').trim().toUpperCase();
-      // 18位格式
-      const re18 = /^\d{17}[0-9X]$/;
-      if (!re18.test(code)) {
-        return { valid: false, reason: '身份证号码应为18位，最后一位可为X' };
-      }
-      // 出生日期 (7-14位)
-      const y = parseInt(code.slice(6, 10), 10);
-      const m = parseInt(code.slice(10, 12), 10);
-      const d = parseInt(code.slice(12, 14), 10);
-      const birthStr = `${y.toString().padStart(4,'0')}-${m.toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
-      const birthDate = new Date(birthStr);
-      if (isNaN(birthDate.getTime()) || birthDate.getFullYear() != y || (birthDate.getMonth()+1) != m || birthDate.getDate() != d) {
-        return { valid: false, reason: '身份证中的出生日期无效' };
-      }
-      // 校验码
-      const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
-      const parity = ['1','0','X','9','8','7','6','5','4','3','2'];
-      let sum = 0;
-      for (let i=0; i<17; i++) sum += parseInt(code[i],10) * weights[i];
-      const mod = sum % 11;
-      if (parity[mod] !== code[17]) {
-        return { valid: false, reason: '身份证校验位不正确' };
-      }
-      // 性别：第17位（index 16）奇数男，偶数女
-      const genderCode = parseInt(code[16], 10);
-      const gender = (genderCode % 2 === 1) ? '男' : '女';
-      // 年龄
-      const age = this.computeAgeFromDob(birthStr);
-      return { valid: true, birth: birthStr, gender, age };
-    },
-
     validateTemperature() {
       this.checkValue(this.emergencyData, 'temperature', this.emergencyData.temperature, 35, 42, '摄氏度');
     },
@@ -3881,7 +3452,7 @@ validateRequiredByStars() {
           params: { id: this.patientId},
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': getToken()
+            'Authorization': this.token
           },
         });
       // 处理响应
@@ -3907,45 +3478,20 @@ validateRequiredByStars() {
         console.log(this.formData)
       }
     },
-    async getNextPatientId() {
-      const response = await axios.post(API_URL + 'pat/frontPatInfo', null, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': getToken()
-        }
-      });
-      if (!response.data || response.data.code !== 200) {
-        throw new Error(response.data?.message || '获取患者编号失败');
-      }
-      const rows = Array.isArray(response.data.data) ? response.data.data : [];
-      const usedIds = new Set(
-        rows
-          .reduce((ids, item) => ids.concat([item?.patientId, item?.id]), [])
-          .map(value => Number(value))
-          .filter(id => Number.isInteger(id) && id > 0)
-      );
-      let nextId = usedIds.size ? Math.max(...usedIds) + 1 : 1;
-      while (usedIds.has(nextId)) nextId++;
-      return nextId;
-    },
     async patInfoAdd(){
-      // 新建申报不得沿用 Vuex 中上一位患者的 ID。
-      const nextPatientId = await this.getNextPatientId();
       const patInfoDTO = {
-        id: 0,
-        patientId: nextPatientId,
         age: parseInt(this.formData.age, 10), // 确保是整数
-        birthDate: this.formData.dob ? new Date(this.formData.dob) : null,
-        educationLevel: Number(this.formData.education || 0),
+        birthDate: new Date(this.formData.dob), // 确保是Date对象
+        educationLevel: this.formData.education,
         ethnicity: this.formData.ethnicity,
         gender: this.formData.gender,
         height: this.formData.height,
         idNumber: this.formData.idNumber,
-        idType: Number(this.formData.idType || 0),
-        maritalStatus: Number(this.formData.maritalStatus || 0),
-        medicalRecordDate: this.formData.caseDate ? new Date(this.formData.caseDate) : null,
-        occupation: Number(this.formData.occupation || 0),
-        outPatientId: String(this.emergencyData.outpatientId || ''),
+        idType: this.formData.idType, // 确保是整数this.formData.idType
+        maritalStatus: this.formData.maritalStatus, // 确保是整数
+        medicalRecordDate: new Date(this.formData.caseDate), // 确保是Date对象
+        occupation: this.formData.occupation,
+        //outPatientId: this.patientId,
         patientName: this.formData.name,
         phone: this.formData.phone,
         weight: this.formData.weight,
@@ -3956,16 +3502,12 @@ validateRequiredByStars() {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': getToken()
+            'Authorization': this.token
           },
         })
       console.log(response)
       if (response.data.code === 200) {
-        const created = response.data.data || {};
-        // 后续所有子表都使用新患者编号，不再沿用旧的 2。
-        this.patientId = Number(created.id ?? created.patientId ?? nextPatientId);
-      } else {
-        throw new Error(response.data.message || '患者基本信息提交失败');
+        this.patientId = response.data.data.id;
       }
     },
     async patEmInfoAdd(){
@@ -3978,7 +3520,6 @@ validateRequiredByStars() {
         onsetTime: this.emergencyData.onsetTime, // 发病时间
         outpatientId: this.emergencyData.outpatientId, // 门诊ID
         patientId: this.patientId, // 患者ID，需根据实际情况设置
-        isCriticalIllnessInsurance:this.emergencyData.isCriticalIllnessInsurance,
 
       };
       console.log("patEmInfo")
@@ -3988,7 +3529,7 @@ validateRequiredByStars() {
           params: { id: this.patientId},
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': getToken()
+            'Authorization': this.token
           },
         })
       console.log(response)
@@ -3997,7 +3538,6 @@ validateRequiredByStars() {
       const patConAsDTO = {
         additionalSymptoms: this.emergencyData.symptoms.join(', '), // 将症状数组转换为字符串
         conditionType: this.emergencyData.symptomslevel, // 获取病情类型
-        patientId:this.patientId
         //emergencyId: 0 // 确保有有效的急救ID
         //assessmentId: 0, // 根据实际情况设置
 
@@ -4008,17 +3548,17 @@ validateRequiredByStars() {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': getToken()
+            'Authorization': this.token
           },
         })
       console.log(response)
     },
     async patAdInfoAdd(){
       const patAdMeDTO = {
-        ambulanceUnit: Array.isArray(this.emergencyData.transportUnit) ? this.emergencyData.transportUnit.join(',') : (this.emergencyData.transportUnit || ''), // 转换救护车类型
-        callTime: this.emergencyData.callTime ? new Date(this.emergencyData.callTime).toISOString() : null, // 呼救时间
-        firstMedicalContactTime: this.emergencyData.firstContactTime ? new Date(this.emergencyData.firstContactTime).toISOString() : null, // 首次医疗接触时间
-        hospitalArrivalTime: this.emergencyData.arrivalTime ? new Date(this.emergencyData.arrivalTime).toISOString() : null, // 到达医院时间
+        ambulanceUnit: this.emergencyData.transportUnit, // 转换救护车类型
+        callTime: this.emergencyData.callTime, // 呼救时间
+        firstMedicalContactTime: this.emergencyData.firstContactTime, // 首次医疗接触时间
+        hospitalArrivalTime: this.emergencyData.arrivalTime, // 到达医院时间
         methodType: this.emergencyData.source, // 获取来院方式
         transferHospitalName: this.emergencyData.hospitalName || '', // 转送医院名称
         patientId: this.patientId, // 患者ID
@@ -4026,14 +3566,14 @@ validateRequiredByStars() {
         medicalStaff: this.emergencyData.medicalStaff,
         isTransferHighHospital: this.emergencyData.directTransfer === 'True', // 直接转送上级医院（布尔值）
         transferType: this.emergencyData.transferType || '', // 转院类型
-        transferHospitalInTime: this.emergencyData.transferInTime ? new Date(this.emergencyData.transferInTime).toISOString() : null, // 转出医院入门时间
-        decisionTransferTime: this.emergencyData.decisionTransferTime ? new Date(this.emergencyData.decisionTransferTime).toISOString() : null, // 决定转院时间
-        firstDiagnosisTime: this.emergencyData.firstDoctorTime ? new Date(this.emergencyData.firstDoctorTime).toISOString() : null,
-        transferHospitalOutTime: this.emergencyData.transferOutTime ? new Date(this.emergencyData.transferOutTime).toISOString() : null, // 转出医院出门时间
+        transferHospitalInTime: this.emergencyData.transferInTime, // 转出医院入门时间
+        decisionTransferTime: this.emergencyData.decisionTransferTime, // 决定转院时间
+        firstDiagnosisTime: this.emergencyData.firstDoctorTime,
+        transferHospitalOutTime: this.emergencyData.transferOutTime, // 转出医院出门时间
 
-        inHospitalContactTime: this.emergencyData.inHospitalConsultationTime ? new Date(this.emergencyData.inHospitalConsultationTime).toISOString() : null, // 院内接诊时间
-        bedMedicalContactTime: this.emergencyData.bedDoctorContactTime ? new Date(this.emergencyData.bedDoctorContactTime).toISOString() : null, // 床位医生接触时间
-        leaveDepartmentTime: this.emergencyData.leaveDepartmentTime ? new Date(this.emergencyData.leaveDepartmentTime).toISOString() : null, // 离开科室时间
+        inHospitalContactTime: this.emergencyData.inHospitalConsultationTime, // 院内接诊时间
+        bedMedicalContactTime: this.emergencyData.bedDoctorContactTime, // 床位医生接触时间
+        leaveDepartmentTime: this.emergencyData.leaveDepartmentTime, // 离开科室时间
         onsetDepartment: this.emergencyData.department || '' // 发病地点
       };
       console.log("patAdMeDTO ")
@@ -4042,7 +3582,7 @@ validateRequiredByStars() {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': getToken()
+            'Authorization': this.token
           },
         })
       console.log(response)
@@ -4058,8 +3598,8 @@ validateRequiredByStars() {
         pulse: Number(this.emergencyData.pulse), // 脉搏
         respiration: Number(this.emergencyData.respiration), // 呼吸
         temperature: Number(this.emergencyData.temperature), // 体温
-        patientId:this.patientId,
-        heartRate: this.emergencyData.heartRate === '' ? null : Number(this.emergencyData.heartRate)
+
+        oxygenSaturation: Number(this.emergencyData.heartRate)
 
       };
       console.log("patViSiDTO")
@@ -4068,20 +3608,35 @@ validateRequiredByStars() {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': getToken()
+            'Authorization': this.token
           },
         })
       console.log(response)
     },
     async patEcgInfoAdd(){
-      // uploadEcgFiles 内部已完成：上传图片 → 写入数据库（pic/ecgPicUrl/upload + pic/ecgPicUrl/add）
-      // 心电图选"否"时跳过
-      await this.uploadEcgFiles()
+      const patEcgDTO = {
+        ecgPerformed: this.chestPainData.ecg, // 根据前端的 ecg 选择判断是否进行了心电图检查
+        ecgDiagnosisTime: this.chestPainData.ecgs.length > 0 ? this.chestPainData.ecgs[0].time || '' : '',//this.chestPainData.ecgs.map(ecg => ecg.time || '').join(', '), // 心电图诊断时间
+        checkTime: this.chestPainData.ecgDiagFalsesisTime, // 当前时间作为检查时间
+        filePath: this.chestPainData.ecgs.map(ecg => ecg.filePath || '').join(', '), // 处理多个心电图文件路径
+        patientId: this.patientId, // 患者ID，确保有有效值
+
+        remoteEcgTransmission: this.chestPainData.ecgRemote, // 判断是否接受远程心电图
+        remoteEcgTime: this.chestPainData.ecgRemoteTime,
+        remoteEcgTransmissionMethod: parseInt(this.chestPainData.remoteEcgTransmissionMethod),
+      };
+      console.log("patEcgDTO")
+      console.log(patEcgDTO)
+      const response = await axios.post(API_URL + 'pat/patEcgInfoAdd', patEcgDTO,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': this.token
+          },
+        })
+      console.log(response)
     },
     async labAdd(){
-      const t0 = (this.chestPainData.troponins && this.chestPainData.troponins.length > 0)
-       ? this.chestPainData.troponins[0] : {};
-
       const patLabDTO = {
         patientId: this.patientId, // 假设患者ID为0，实际应从上下文中获取
         isSerumCreatinine: this.chestPainData.creatinine === 'True',
@@ -4097,11 +3652,11 @@ validateRequiredByStars() {
         isCkmb: this.chestPainData.ckmb === 'True',
         ckmbValue: this.chestPainData.ckmb === 'True' ? parseFloat(this.chestPainData.ckmbValue) : null,
         isReportTroponin: this.chestPainData.troponin === 'True',
-        troponinValue: this.chestPainData.troponin === 'True' ? (t0.unit || null): null, // 将数组转换为字符串
-        firstTroponinType: this.chestPainData.troponin === 'True' ?(t0.type || null): null, // 获取第一个肌钙蛋白的类型
-        troponinResult: this.chestPainData.troponin === 'True'?(t0.result || null): null, // 获取第一个肌钙蛋白的结果
-        bloodDrawCompletionTime: this.chestPainData.troponin === 'True'?(t0.bloodDrawTime || null): null ,
-        reportObtainTime: this.chestPainData.troponin === 'True' ?(t0.reportTime || null):null,
+        troponinValue: this.chestPainData.troponin === 'True' ? JSON.stringify(this.chestPainData.troponins) : null, // 将数组转换为字符串
+        firstTroponinType: this.chestPainData.troponin === 'True' && this.chestPainData.troponins.length > 0 ? this.chestPainData.troponins[0].type.join(",") : null, // 获取第一个肌钙蛋白的类型
+        troponinResult: this.chestPainData.troponin === 'True' && this.chestPainData.troponins.length > 0 ? this.chestPainData.troponins[0].result : null, // 获取第一个肌钙蛋白的结果
+        bloodDrawCompletionTime: this.chestPainData.troponin === 'True' && this.chestPainData.troponins.length > 0 ? this.chestPainData.troponins[0].bloodDrawTime : null,
+        reportObtainTime: this.chestPainData.troponin === 'True' && this.chestPainData.troponins.length > 0 ? this.chestPainData.troponins[0].reportTime : null
 
       };
       console.log("patLabDTO")
@@ -4110,7 +3665,7 @@ validateRequiredByStars() {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': getToken()
+            'Authorization': this.token
           },
         })
       console.log(response)
@@ -4139,13 +3694,13 @@ validateRequiredByStars() {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': getToken()
+            'Authorization': this.token
           },
         })
       //console.log(response)
 
       const patDiaDTO = {
-        diagnosisDoctor: this.chestPainData.doctorName , // 医生姓名
+        diagnosisDoctor: this.chestPainData.diagnosisDoctor , // 医生姓名
         initialDiagnosis: this.chestPainData.diagFalsesis, // 初步诊断
         initialDiagnosisTime: this.chestPainData.diagFalsesisTime, // 当前时间作为初步诊断时间
         patientId: this.patientId, // 患者ID，根据实际情况设置
@@ -4156,13 +3711,14 @@ validateRequiredByStars() {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': getToken()
+            'Authorization': this.token
           },
         })
 
       switch (this.chestPainData.diagFalsesis) {
         case 'STEMI':
           const patStemiDTO = {
+            informedConsentStartTime:this.chestPainData.informedConsentStartTime,
             informedConsentSignatureTime:this.chestPainData.informedConsentSignatureTime,
             initialDiagnosisTime:this.chestPainData.informedConsentStartTime,
 
@@ -4186,66 +3742,18 @@ validateRequiredByStars() {
             isBetaBlocker: this.chestPainData.betaBlocker === 'True', // β受体阻滞剂
             isBypassCcu: this.chestPainData.ccuBypass === 'True', // 绕行CCU
             isBypassEmergency: this.chestPainData.emergencyBypass === 'True', // 绕行急诊
-            isReperfusion: this.chestPainData.reperfusion?? null, // 再灌注
+            isReperfusion: this.chestPainData.reperfusion === 'True', // 再灌注
             isStatinTherapy: this.chestPainData.statinTreatment === 'True', // 他汀治疗
             thrombolysisStartTime: this.chestPainData.thrombolysisStartTime, // 溶栓开始时间
             thrombolysisEndTime: this.chestPainData.thrombolysisEndTime, // 溶栓结束时间
-            patientId: this.patientId ,//患者ID
-            reperfusionMethod: (() => {
-              const v =
-                this.chestPainData.reperfusionMethod ??
-                this.chestPainData.reperfusionMeasures; // 兼容旧字段，确保不丢值
-              if (Array.isArray(v)) return v.join(','); // 若 UI 多选
-              return v || null;
-            })(),
-            directPciDoctor: this.chestPainData.decidingDoctor ?? this.chestPainData.directPciDoctor ?? null,
-            directPciTime: this.chestPainData.interventionDecisionTime ?? this.chestPainData.directPciTime ?? null,
-            informedConsentStartTime: this.chestPainData.informedConsentStartTime || null,
-            informedConsentSignTime:  this.chestPainData.informedConsentSignatureTime || null,
-            // ===== 溶栓相关 =====
-            thrombolysisScreening: this.chestPainData.thrombolysisScreening || null, // 溶栓筛查结论（字符串/枚举，按你表单）
-            isThrombolysisTreatment: this.chestPainData.thrombolysisTreatment === 'True', // 是否实施溶栓（你表单是 'True'/'False'）
-            // 场所：你表单里是 location + detail，后端既要布尔也要地点名
-            isDirectThrombolysisPlace: this.chestPainData.thrombolysisLocation === 'True' ,// 如你们定义“导管室=直接溶栓”，不符请按你们约定改
-            thrombolysisPlace: this.chestPainData.thrombolysisLocationDetail || this.chestPainData.thrombolysisLocation || null, // 优先细分地点
-
-            // 溶栓知情同意时间（你表单用的是通用知情同意时间，这里直接复用）
-            thrombolysisConsentStartTime: this.chestPainData.informedConsentStartTime || null,
-            thrombolysisConsentSignTime:  this.chestPainData.informedConsentSignatureTime || null,
-
-            // 溶栓用药与剂量
-            // 说明：你表单只有 "thrombolysisDrug"（药名）和 "thrombolysisDose"（剂量），没有“药物代”这一项
-            thrombolyticDrugGeneration: this.chestPainData.thrombolyticDrugGeneration, // 你目前没有对应输入项，若后端必须要“一代/二代/三代”，需要在表单新增该字段
-            thrombolyticDrugDose: Number(this.chestPainData.thrombolysisDose) || null,
-
-            // 溶栓再通
-            isThrombolysisPatency: this.chestPainData.thrombolysisReperfusion === 'True',
-
-            // ===== 补救 PCI（rescue/salvage PCI）=====
-            // 你表单没有专门的 salvage 字段，常用的医生/时间来自“决定介入/决定医生”
-            salvagePciDoctor: this.chestPainData.decidingDoctor || null,
-            salvagePciTime:   this.chestPainData.interventionDecisionTime || null,
-
-            // ===== 转运 PCI（reperfusionMethod=转运PCI 时才有）=====
-            isTransferPci: this.chestPainData.reperfusionMethod === '转运PCI',
-            transferPciType: this.chestPainData.reperfusionMethod === '转运PCI'
-              ? (this.chestPainData.transportPCI || null) // '转出患者' / '接收患者'
-              : null,
-
-              // ===== 并发症 =====
-            // 你当前 STEMI 表单里没有 chestPainData.complication，项目里“合并症/并发症”在 outcomeData.comorbidities
-            // 如果 diagnosis 接口就要这个字段，你可以先用 outcomeData 的合并症字符串；更规范做法是给 STEMI 页加一个并发症输入。
-            complication: this.outcomeData?.comorbidities || null,
-
-
-            // …其余字段原样
-
+            thrombolysisPlace: this.chestPainData.thrombolysisPlace, // 溶栓场所
+            patientId: this.patientId // 患者ID
           }
           const response1 = await axios.post(API_URL + 'diagnosis/stemi/add', patStemiDTO,
             {
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': getToken()
+                'Authorization': this.token
               },
             })
           break;
@@ -4258,7 +3766,7 @@ validateRequiredByStars() {
             aspirinDosageNstemi: this.chestPainData.aspirinDose, // 阿司匹林剂量
             aspirinTimeNstemi: this.chestPainData.aspirinTime, // 阿司匹林时间
             cardiacFunctionGradeNstemi: this.chestPainData.heartFunctionClass, // 心功能分级
-            clopidogrelDosageNstemi: Number(this.chestPainData.clopidogrelDose), // 氯吡格雷剂量
+            clopidogrelDosageNstemi: this.chestPainData.clopidogrelDose, // 氯吡格雷剂量
             clopidogrelTimeNstemi: this.chestPainData.clopidogrelTime, // 氯吡格雷时间
             emergencyInterventionCathLabStartTimeNstemi: this.chestPainData.cathLabStartTime, // 启动导管室时间
             emergencyInterventionDecisionTimeNstemi: this.chestPainData.interventionDecisionTime, // 决定介入时间
@@ -4268,7 +3776,6 @@ validateRequiredByStars() {
             graceRiskStratificationNstemi: this.chestPainData.graceRiskStratification, // Grace危险分层
             graceScoreNstemi: this.chestPainData.graceScore, // Grace分值
             initialDiagnosisTime: this.chestPainData.diagFalsesisTime, // 初步诊断时间
-            treatmentStrategyNstemi:this.chestPainData.treatmentStrategyNstemi,
             invasiveStrategyNstemi: this.chestPainData.invasiveStrategy, // 侵入性策略
             isAnticoagulationNstemi: this.chestPainData.anticoagulation === 'True', // 抗凝
             isAntiplateletTherapyNstemi: this.chestPainData.antiplateletTreatment === 'True', // 抗血小板治疗
@@ -4276,7 +3783,7 @@ validateRequiredByStars() {
             isBypassCcuNstemi: this.chestPainData.ccuBypass === 'True', // 绕行CCU
             isBypassEmergencyNstemi: this.chestPainData.emergencyBypass === 'True', // 绕行急诊
             isCardiacArrestAfterOnset: this.chestPainData.graceAssessment.includes('心脏骤停'), // 心脏骤停
-            isCardiacNecrosisMarkerElevation: this.chestPainData.graceAssessment.includes('心肌坏死标志物升高'),//心肌坏死标志物升高
+            isCardiacNecrosisMarkerElevation: this.chestPainData.graceAssessment.includes('心肌坏死标志物升高'), // 心肌坏死标志物升高
             isCardiogenicShockOrHemodynamicInstability: this.chestPainData.graceHighRisk.includes('心源性休克'), // 心源性休克
             isDynamicStSegmentChange: this.chestPainData.graceHighRisk.includes('ST-T动态演变'), // ST-T动态演变
             isEcgStSegmentChange: this.chestPainData.graceAssessment.includes('ST段改变'), // 心电图ST段改变
@@ -4295,7 +3802,7 @@ validateRequiredByStars() {
             {
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': getToken()
+                'Authorization': this.token
               },
             })
           break;
@@ -4318,7 +3825,6 @@ validateRequiredByStars() {
               graceScoreUa: this.chestPainData.graceScore, // Grace分值
               initialDiagnosisTime: this.chestPainData.diagFalsesisTime, // 初步诊断时间
               invasiveStrategyUa: this.chestPainData.invasiveStrategy, // 侵入性策略
-              treatmentStrategyUa:this.chestPainData.treatmentStrategyUa,
               isAnticoagulationUa: this.chestPainData.anticoagulation === 'True', // 抗凝
               isAntiplateletTherapyUa: this.chestPainData.antiplateletTreatment === 'True', // 抗血小板治疗
               isBetaBlockerUa: this.chestPainData.betaBlocker === 'True', // β受体阻滞剂
@@ -4344,7 +3850,7 @@ validateRequiredByStars() {
             {
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': getToken()
+                'Authorization': this.token
               },
             })
           break;
@@ -4371,7 +3877,7 @@ validateRequiredByStars() {
             {
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': getToken()
+                'Authorization': this.token
               },
             })
           break;
@@ -4395,7 +3901,7 @@ validateRequiredByStars() {
             {
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': getToken()
+                'Authorization': this.token
               },
             })
           break;
@@ -4414,7 +3920,7 @@ validateRequiredByStars() {
             {
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': getToken()
+                'Authorization': this.token
               },
             })
           break;
@@ -4431,7 +3937,7 @@ validateRequiredByStars() {
             {
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': getToken()
+                'Authorization': this.token
               },
             })
           break;
@@ -4447,7 +3953,7 @@ validateRequiredByStars() {
             {
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': getToken()
+                'Authorization': this.token
               },
             })
           break;
@@ -4457,11 +3963,11 @@ validateRequiredByStars() {
           return;
       }
 
-      if (this.chestPainData.reperfusionMethod === '直接PCI' || this.chestPainData.reperfusionMethod === '溶栓' || this.chestPainData.reperfusionMethod === '补救PCI'){
+      if (this.chestPainData.reperfusionMeasures === '直接PCI' || this.chestPainData.reperfusionMeasures === '溶栓' || this.chestPainData.reperfusionMeasures === '补救PCI'){
         const patCatheterDTO = {
           catheterLabActivationTime: this.catheterData.catheterLabActivationTime, // 导管室激活时间
           patientArrivalCatheterLabTime: this.catheterData.patientArrivalCatheterLabTime, // 患者到达导管室时间
-          interventionist: this.catheterData.interventionist, // 介入医师姓名
+          directPciDoctor: this.catheterData.interventionist, // 介入医师姓名
           startPunctureTime: this.catheterData.startPunctureTime, // 开始穿刺时间
           angiographyStartTime: this.catheterData.angiographyStartTime, // 造影开始时间
           anticoagulationDrugAdministrationTime: this.catheterData.anticoagulationDrugAdministrationTime, // 抗凝给药时间
@@ -4472,18 +3978,13 @@ validateRequiredByStars() {
           isDelayed: this.catheterData.isDelayed === 'True', // 是否延误
           delayReasons: this.catheterData.delayReasons, // 延误原因
           patientId: this.patientId,
-          directPciDoctor:this.chestPainData.decidingDoctor,//决定医生
-          directPciTime:this.chestPainData.interventionDecisionTime,//决定介入手术时间
-          informedConsentSignTime:this.chestPainData.informedConsentSignatureTime, //签署知情同意时间
-          thrombolysisConsentStartTime:this.chestPainData.informedConsentStartTime,//溶栓开始知情同意时间
-          thrombolysisConsentSignTime:this.chestPainData.informedConsentSignature,//溶栓签署知情权
-          salvagePciTime:this.chestPainData.interventionDecisionTime,//补救PCI决定介入手术时间
+
         };
         const response77 = await axios.post(API_URL + 'catheter/castemi/add', patCatheterDTO,
           {
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': getToken()
+              'Authorization': this.token
             },
           })
       }
@@ -4496,38 +3997,38 @@ validateRequiredByStars() {
         diagnosisConfirmationTime: this.outcomeData.confirmedDate ? new Date(this.outcomeData.confirmedDate).toISOString() : null,
 
         // 院内新发心力衰竭
-        isNewOnsetHeartFailureInHospital: this.outcomeData.newHeartFailure === "True",
+        isNewOnsetHeartFailureInHospital: this.outcomeData.newHeartFailure,
 
         // 合并症
         complications: this.outcomeData.comorbidities,
 
         // 危险因素
-        isHypertension: this.outcomeData.hypertension === "True",
-        isHyperlipidemia: this.outcomeData.hyperlipidemia === "True",
-        isDiabetes: this.outcomeData.diabetes === "True",
-        isSmoking: this.outcomeData.smoking === "True",
-        isObesity: this.outcomeData.obesity === "True",
-        isEarlyOnsetCVDFamilyHistory: this.outcomeData.familyHistory === "True",
+        isHypertension: this.outcomeData.hypertension,
+        isHyperlipidemia: this.outcomeData.hyperlipidemia,
+        isDiabetes: this.outcomeData.diabetes,
+        isSmoking: this.outcomeData.smoking,
+        isObesity: this.outcomeData.obesity,
+        isEarlyOnsetCVDFamilyHistory: this.outcomeData.familyHistory,
 
         // 合并疾病
-        isCoronaryHeartDisease: this.outcomeData.coronaryHeartDisease === "True",
-        isRevascularizationHistory: this.outcomeData.revascularizationHistory === "True",
-        isAtrialFibrillation: this.outcomeData.af === "True",
+        isCoronaryHeartDisease: this.outcomeData.coronaryHeartDisease,
+        isRevascularizationHistory: this.outcomeData.revascularizationHistory,
+        isAtrialFibrillation: this.outcomeData.af,
         atrialFibrillationType: this.outcomeData.afType,
-        isChronicHeartFailure: this.outcomeData.chronicHeartFailure === "True",
-        isValvularHeartDisease: this.outcomeData.heartValveDisease === "True",
-        isCerebrovascularDisease: this.outcomeData.cerebrovascularDisease === "True",
+        isChronicHeartFailure: this.outcomeData.chronicHeartFailure,
+        isValvularHeartDisease: this.outcomeData.heartValveDisease,
+        isCerebrovascularDisease: this.outcomeData.cerebrovascularDisease,
         cerebrovascularDiseaseType: this.outcomeData.cerebrovascularDiseaseType,
-        isPeripheralArterialDisease: this.outcomeData.peripheralArteryDisease === "True",
-        isAorticAneurysm: this.outcomeData.aorticAneurysm === "True",
-        isCOPD: this.outcomeData.copd === "True",
-        isChronicKidneyDisease: this.outcomeData.chronicKidneyDisease === "True",
-        isAnemia: this.outcomeData.anemia === "True",
-        isPepticUlcer: this.outcomeData.pepticUlcer === "True",
-        isThyroidDysfunction: this.outcomeData.thyroidFunctionAbFalsermal === "True",
+        isPeripheralArterialDisease: this.outcomeData.peripheralArteryDisease,
+        isAorticAneurysm: this.outcomeData.aorticAneurysm,
+        isCOPD: this.outcomeData.copd,
+        isChronicKidneyDisease: this.outcomeData.chronicKidneyDisease,
+        isAnemia: this.outcomeData.anemia,
+        isPepticUlcer: this.outcomeData.pepticUlcer,
+        isThyroidDysfunction: this.outcomeData.thyroidFunctionAbFalsermal,
 
         // 检查结果
-        is72hTroponinChecked: this.outcomeData.troponin72h === "True",
+        is72hTroponinChecked: this.outcomeData.troponin72h,
         troponinMaxValue72h: this.outcomeData.troponinMaxValue ? parseFloat(this.outcomeData.troponinMaxValue) : null,
         troponinType72h: this.outcomeData.troponin72h,
 
@@ -4535,21 +4036,21 @@ validateRequiredByStars() {
         natriureticPeptideType: this.outcomeData.bnp,
         natriureticPeptideMaxValue: this.outcomeData.bnpMaxValue ? parseFloat(this.outcomeData.bnpMaxValue) : null,
 
-        isTotalCholesterolChecked: this.outcomeData.tc === "True",
+        isTotalCholesterolChecked: this.outcomeData.tc,
         totalCholesterolValue: this.outcomeData.tcValue ? parseFloat(this.outcomeData.tcValue) : null,
 
-        isTriglycerideChecked: this.outcomeData.tg === "True",
+        isTriglycerideChecked: this.outcomeData.tg,
         triglycerideValue: this.outcomeData.tgValue ? parseFloat(this.outcomeData.tgValue) : null,
 
-        isHDLChecked: this.outcomeData.hdl === "True",
+        isHDLChecked: this.outcomeData.hdl,
         hdlValue: this.outcomeData.hdlValue ? parseFloat(this.outcomeData.hdlValue) : null,
 
-        isLDLChecked: this.outcomeData.ldl === "True",
+        isLDLChecked: this.outcomeData.ldl,
         dlValue: this.outcomeData.ldlValue ? parseFloat(this.outcomeData.ldlValue) : null,
 
-        isEchocardiogramChecked: this.outcomeData.echo === "True",
-        isVentricularAneurysm: this.outcomeData.wallAneurysm === "True",
-        isRegionalWallMotionAbnormality: this.outcomeData.wallMotionAbFalsermality === "True",
+        isEchocardiogramChecked: this.outcomeData.echo,
+        isVentricularAneurysm: this.outcomeData.wallAneurysm,
+        isRegionalWallMotionAbnormality: this.outcomeData.wallMotionAbFalsermality,
 
         // 非ACS心源性胸痛类型
         nonACSCardiogenicChestPainType: this.outcomeData.FalsenACSChestPainType,
@@ -4573,7 +4074,7 @@ validateRequiredByStars() {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': getToken()
+            'Authorization': this.token
           },
         })
       console.log(response)
@@ -4590,7 +4091,7 @@ validateRequiredByStars() {
         patientOutcome: this.outcomeData.dischargeStatus,
 
         // 出院相关信息
-        dischargeTime: (this.outcomeData.dischargeStatus === '出院' && this.outcomeData.dischargeTime) ? new Date(this.outcomeData.dischargeTime).toISOString() : null,
+        dischargeTime: this.outcomeData.dischargeStatus === '出院' ? this.outcomeData.dischargeTime : null,
         treatmentOutcome: this.outcomeData.dischargeStatus === '出院' ? this.outcomeData.treatmentOutcome : null,
         isCarryMedicationAfterDischarge: this.outcomeData.dischargeStatus === '出院' ? this.outcomeData.antiplateletMedication === 'True' : false,
         antithromboticDrugName: this.outcomeData.dischargeStatus === '出院' && this.outcomeData.antiplateletMedication === 'True' ? this.outcomeData.antiplateletDrugName : null,
@@ -4606,23 +4107,23 @@ validateRequiredByStars() {
         betaBlockerDrugDose: this.outcomeData.dischargeStatus === '出院' && this.outcomeData.betaBlockerMedication === 'True' ? parseFloat(this.outcomeData.betaBlockerDosage) : null,
 
         // 转送其他医院相关信息
-        leaveHospitalTime: (this.outcomeData.dischargeStatus === '转送其他医院' && this.outcomeData.departureTime) ? new Date(this.outcomeData.departureTime).toISOString() : null,
+        leaveHospitalTime: this.outcomeData.dischargeStatus === '转送其他医院' ? this.outcomeData.departureTime : null,
         isNetworkHospital: this.outcomeData.dischargeStatus === '转送其他医院' ? this.outcomeData.networkHospital === 'True' : false,
         transferHospitalName: this.outcomeData.dischargeStatus === '转送其他医院' && this.outcomeData.networkHospital === 'True' ? this.outcomeData.networkHospitalName : null,
         isTransferPCI: this.outcomeData.dischargeStatus === '转送其他医院' ? this.outcomeData.transferPci === 'True' : false,
         isDirectToCatheterLab: this.outcomeData.dischargeStatus === '转送其他医院' ? this.outcomeData.directCathLab === 'True' : false,
-        actualInterventionStartTime: (this.outcomeData.dischargeStatus === '转送其他医院' && this.outcomeData.directCathLab === 'True' && this.outcomeData.actualInterventionStartTime) ? new Date(this.outcomeData.actualInterventionStartTime).toISOString() : null,
+        actualInterventionStartTime: this.outcomeData.dischargeStatus === '转送其他医院' && this.outcomeData.directCathLab === 'True' ? this.outcomeData.actualInterventionStartTime : null,
         isTeleEcgTransmission: this.outcomeData.dischargeStatus === '转送其他医院' ? this.outcomeData.ecgTransmission === '传输心电图至协作单位' : false,
-        ecgTransmissionTime: (this.outcomeData.dischargeStatus === '转送其他医院' && this.outcomeData.ecgTransmission === '传输心电图至协作单位' && this.outcomeData.ecgTransmissionTime) ? new Date(this.outcomeData.ecgTransmissionTime).toISOString() : null,
+        ecgTransmissionTime: this.outcomeData.dischargeStatus === '转送其他医院' && this.outcomeData.ecgTransmission === '传输心电图至协作单位' ? this.outcomeData.ecgTransmissionTime : null,
         ecgTransmissionMethod: this.outcomeData.dischargeStatus === '转送其他医院' && this.outcomeData.ecgTransmission === '传输心电图至协作单位' ? this.outcomeData.ecgTransmissionMethod : null,
 
         // 转送其他科室相关信息
-        transferDepartmentTime: (this.outcomeData.dischargeStatus === '转送其它科室' && this.outcomeData.transferTime) ? new Date(this.outcomeData.transferTime).toISOString() : null,
+        transferDepartmentTime: this.outcomeData.dischargeStatus === '转送其它科室' ? this.outcomeData.transferTime : null,
         acceptingDepartment: this.outcomeData.dischargeStatus === '转送其它科室' ? this.outcomeData.admittingDepartment : null,
         transferDepartmentReason: this.outcomeData.dischargeStatus === '转送其它科室' ? this.outcomeData.transferReason : null,
 
         // 死亡相关信息
-        deathTime: (this.outcomeData.dischargeStatus === '死亡' && this.outcomeData.deathTime) ? new Date(this.outcomeData.deathTime).toISOString() : null,
+        deathTime: this.outcomeData.dischargeStatus === '死亡' ? this.outcomeData.deathTime : null,
         isCardiacCauseOfDeath: this.outcomeData.dischargeStatus === '死亡' ? this.outcomeData.deathCause === '心源性' : false,
         patientConditionDescriptionDeath: this.outcomeData.dischargeStatus === '死亡' ? this.outcomeData.deathDescription : null,
 
@@ -4639,130 +4140,106 @@ validateRequiredByStars() {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': getToken()
+            'Authorization': this.token
           },
         })
       console.log(response)
     },
 
-
-
-async handleSubmit() {
-      // 基于红星 + 可见性的动态必填校验
-      if (!this.validateRequiredByStars()) { return; }
-
+    async handleSubmit() {
       // 在提交前进行表单验证
       if (!this.validateFormFields()) {
         return; // 验证失败，停止提交
       }
 
-      // 逐个模块提交，失败立即提示并中止
-      const tasks = [
-        { fn: this.patInfoAdd, label: '基本信息' },
-        { fn: this.patEmInfoAdd, label: '急救信息' },
-        { fn: this.patConInfoAdd, label: '病情信息' },
-        { fn: this.patAdInfoAdd, label: '入院信息' },
-        { fn: this.patViInfoAdd, label: '生命体征' },
-        { fn: this.patEcgInfoAdd, label: '心电图信息' },
-        { fn: this.labAdd, label: '化验结果' },
-        { fn: this.heartAdd, label: '心脏检查' },
-        { fn: this.outdiaAdd, label: '出院诊断' },
-        { fn: this.outAdd, label: '出院小结' },
-      ];
+      // 处理表单提交逻辑
 
-      for (const task of tasks) {
-        try {
-          // 支持部分任务需要参数时写成 () => this.xxx(args)
-          await task.fn();
-        } catch (e) {
-          console.error(`${task.label} 提交失败`, e);
-          this.showMessage(`${task.label} 提交失败，请检查该部分数据`, 'error');
-          return; // 出错中止后续提交
-        }
-      }
+      //console.log("token:"+token)
+      await this.patInfoAdd()
+      this.patEmInfoAdd()
+      this.patConInfoAdd()
+      this.patAdInfoAdd()
+      this.patViInfoAdd()
+      this.patEcgInfoAdd()
+      this.labAdd()
+      this.heartAdd()
+      this.outdiaAdd()
+      this.outAdd()
 
-      this.showMessage('全部提交成功', 'success');
-    }
-
-,
-
-validateFormFields() {
+      console.log('Form Data:', {
+        ...this.formData,
+        emergencyData: this.emergencyData,
+        chestPainData: this.chestPainData,
+        outcomeData: this.outcomeData
+      });
+      // 提交后重置表单
+      //this.resetForm();
+    },
+    validateFormFields() {
       let isValid = true;
 
-      // 1) 必填校验
+      // 验证必填字段
       const requiredFields = [
         { field: 'name', label: '姓名' },
         { field: 'age', label: '年龄' },
         { field: 'gender', label: '性别' },
         { field: 'phone', label: '联系电话' },
-        // 出生日期、身高、体重已改为非必填
+        { field: 'weight', label: '体重' },
+        { field: 'height', label: '身高' },
+        { field: 'ethnicity', label: '民族' },
+        { field: 'dob', label: '出生日期' },
+        { field: 'caseDate', label: '病例归属日期' }
       ];
+
+      // 检查必填字段
       for (const item of requiredFields) {
-        if (!this.formData[item.field] && this.formData[item.field] !== 0) {
-          this.showMessage(`${item.label}为必填项`, 'warning');
+        if (!this.formData[item.field] || this.formData[item.field] === '') {
+          alert(`${item.label}为必填项，请填写`);
           isValid = false;
-          return false;
+          break;
         }
       }
 
-      // 2) 姓名：只允许中英文、空格、间隔点“·”
-      if (!this.validateName(this.formData.name)) {
-        this.showMessage('姓名只能包含中英文字符、空格或“·”，且不能包含数字或符号', 'error');
-        return false;
-      }
+      if (!isValid) return false;
 
-      // 3) 年龄：纯数字且与出生日期合理
-      if (!/^\d{1,3}$/.test(String(this.formData.age || ''))) {
-        this.showMessage('年龄必须为纯数字', 'error');
-        return false;
-      }
-      const ageFromDob = this.computeAgeFromDob(this.formData.dob);
-      if (ageFromDob != null) {
-        const ageNum = parseInt(this.formData.age, 10);
-        if (ageNum !== ageFromDob) {
-          this.showMessage(`年龄与出生日期不一致（按出生日期计算为 ${ageFromDob} 岁）`, 'error');
-          return false;
+      // 验证年龄范围
+      if (this.formData.age) {
+        const age = parseInt(this.formData.age);
+        if (isNaN(age) || age < 1 || age > 130) {
+          alert('年龄必须在1到130岁之间');
+          isValid = false;
         }
       }
 
-      // 4) 手机号：11位大陆手机号
-      if (!this.validatePhone(this.formData.phone)) {
-        this.showMessage('请输入正确的11位大陆手机号（以1开头）', 'error');
-        return false;
-      }
-
-      // 5) 证件：若证件类型为身份证，则校验并与性别/出生日期/年龄关联
-      if (String(this.formData.idType) === '1' && this.formData.idNumber) {
-        const info = this.parseIdCard(this.formData.idNumber);
-        if (!info.valid) {
-          this.showMessage(`身份证校验失败：${info.reason}`, 'error');
-          return false;
-        }
-        // 性别一致
-        if (this.formData.gender && info.gender && this.formData.gender !== info.gender) {
-          this.showMessage(`身份证性别（${info.gender}）与所填性别不一致`, 'error');
-          return false;
-        }
-        // 出生日期一致
-        if (this.formData.dob && info.birth && this.formData.dob !== info.birth) {
-          this.showMessage(`身份证出生日期（${info.birth}）与所填出生日期不一致`, 'error');
-          return false;
-        }
-        // 年龄一致
-        const ageNum = parseInt(this.formData.age, 10);
-        if (!isNaN(ageNum) && info.age != null && ageNum !== info.age) {
-          this.showMessage(`身份证推算年龄为 ${info.age} 岁，与所填年龄不一致`, 'error');
-          return false;
+      // 验证身高范围
+      if (this.formData.height) {
+        const height = parseFloat(this.formData.height);
+        if (isNaN(height) || height < 10 || height > 250) {
+          alert('身高必须在10到250厘米之间');
+          isValid = false;
         }
       }
 
-      if (!this.validateEcgFiles()) {
-        return false;
+      // 验证体重范围
+      if (this.formData.weight) {
+        const weight = parseFloat(this.formData.weight);
+        if (isNaN(weight) || weight < 3 || weight > 500) {
+          alert('体重必须在3到500公斤之间');
+          isValid = false;
+        }
+      }
+
+      // 验证手机号格式
+      if (this.formData.phone) {
+        const phoneRegex = /^1[3-9]\d{9}$/;
+        if (!phoneRegex.test(this.formData.phone)) {
+          alert('请输入正确的手机号格式');
+          isValid = false;
+        }
       }
 
       return isValid;
-    }
-,
+    },
     resetForm() {
       this.currentModule= 'emergency', // 默认显示急救模块
         this.formData= {
@@ -4788,9 +4265,9 @@ validateFormFields() {
           detailedAddress: '',
           insuranceType: '',
           insuranceNumber: '',
-          isCriticalIllnessInsurance: '',
+          severeInsurance: '',
           symptoms: [],
-          source: '',
+          source: ''
       },
         this.chestPainData= {
         ecg: '',
@@ -4821,7 +4298,7 @@ validateFormFields() {
       }
     },
     addEcg() {
-      this.chestPainData.ecgs.push({ time: '', file: null, fileName: '', filePreview: null, filePath: '' });
+      this.chestPainData.ecgs.push({ time: '', file: null, fileName: '', filePreview: null });
       console.log("添加心电图");
     },
     removeEcg(index) {
@@ -4831,90 +4308,23 @@ validateFormFields() {
     handleFileUpload(event, index) {
       const file = event.target.files[0];
       if (file) {
-        this.$set(this.chestPainData.ecgs[index], 'file', file);
-        this.$set(this.chestPainData.ecgs[index], 'fileName', file.name);
-        this.$set(this.chestPainData.ecgs[index], 'filePath', '');
+        this.chestPainData.ecgs[index].file = file;
+        this.chestPainData.ecgs[index].fileName = file.name;
 
         // 检查是否为图片文件
         if (file.type.startsWith('image/')) {
           const reader = new FileReader();
           reader.onload = (e) => {
-            this.$set(this.chestPainData.ecgs[index], 'filePreview', e.target.result);
+            this.chestPainData.ecgs[index].filePreview = e.target.result;
           };
           reader.readAsDataURL(file);
         } else {
-          this.$set(this.chestPainData.ecgs[index], 'filePreview', null);
+          this.chestPainData.ecgs[index].filePreview = null;
         }
-      }
-    },
-    validateEcgFiles() {
-      if (this.chestPainData.ecg !== 'True') return true;
-      const ecgs = this.chestPainData.ecgs || [];
-      if (!ecgs.length) {
-        this.showMessage('请至少添加一条心电图记录', 'error');
-        this.currentModule = 'chestPain';
-        return false;
-      }
-      for (let i = 0; i < ecgs.length; i++) {
-        const ecg = ecgs[i];
-        if (!ecg.time) {
-          this.showMessage(`第 ${i + 1} 条心电图时间未填写`, 'error');
-          this.currentModule = 'chestPain';
-          return false;
-        }
-        if (!ecg.file && !ecg.filePath) {
-          this.showMessage(`第 ${i + 1} 条心电图文件未上传`, 'error');
-          this.currentModule = 'chestPain';
-          return false;
-        }
-      }
-      return true;
-    },
-    async uploadEcgFiles() {
-      if (this.chestPainData.ecg !== 'True') return;
-      const ecgs = this.chestPainData.ecgs || [];
-      for (let i = 0; i < ecgs.length; i++) {
-        const ecg = ecgs[i];
-        if (!ecg || ecg.filePath || !ecg.file) continue;
-
-        // 第一步：上传图片，获取文件路径
-        const formData = new FormData();
-        formData.append('file', ecg.file);
-        const uploadRes = await axios.post(API_URL + 'pic/ecgPicUrl/upload', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': getToken()
-          }
-        });
-        const data = uploadRes && uploadRes.data && uploadRes.data.data;
-        const filePath = (typeof data === 'string' ? data : (data && (data.url || data.filePath || data.path))) || '';
-        if (!filePath) {
-          throw new Error(`第 ${i + 1} 条心电图上传成功但未返回文件路径`);
-        }
-        this.$set(ecg, 'filePath', filePath);
-
-        // 第二步：把路径、患者ID、时间写入数据库
-        const ecgAddDTO = {
-          patientId: this.patientId,
-          filePath: filePath,
-          ecgPerformed: true,
-          ecgDiagnosisTime: ecg.time || '',
-          checkTime: this.chestPainData.ecgDiagFalsesisTime || '',
-          ecgDiagnosis: '',
-          remoteEcgTransmission: this.chestPainData.ecgRemote === 'True',
-          remoteEcgTime: this.chestPainData.ecgRemoteTime || '',
-          transmissionMethod: this.chestPainData.transmissionMethod ? parseInt(this.chestPainData.transmissionMethod, 10) : 0,
-        };
-        await axios.post(API_URL + 'pic/ecgPicUrl/add', ecgAddDTO, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': getToken()
-          }
-        });
       }
     },
     addTroponin() {
-      this.chestPainData.troponins.push({ type: '', unit: '', result: '', bloodDrawTime: '', reportTime: '' });
+      this.chestPainData.troponins.push({ type: [], unit: [], result: '', bloodDrawTime: '', reportTime: '' });
     },
     removeTroponin(index) {
       this.chestPainData.troponins.splice(index, 1);
@@ -5212,152 +4622,8 @@ button:disabled {
   background-color: #ccc;
 }
 
-button:hover:not(:disabled) {
+button:hover:Falset(:disabled) {
   background-color: #0056b3;
-}
-/* ===== 智能识别浮动按钮 & 弹窗 ===== */
-.form-container { position: relative; }
-
-.ocr-float-btn {
-  position: absolute;
-  top: 12px;
-  right: 20px;
-  background: #409eff;
-  color: #fff;
-  padding: 6px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  z-index: 100;
-  user-select: none;
-  box-shadow: 0 2px 8px rgba(64,158,255,0.3);
-}
-.ocr-float-btn:hover { background: #66b1ff; }
-
-.ocr-dialog-backdrop {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.45);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 3000;
-}
-.ocr-dialog {
-  background: #fff;
-  border-radius: 10px;
-  width: min(980px, calc(100vw - 40px));
-  max-height: 88vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 8px 28px rgba(0,0,0,.2);
-}
-.ocr-dialog-header {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid #eee;
-  font-weight: 600; font-size: 15px;
-}
-.ocr-close-btn {
-  background: transparent; border: none;
-  font-size: 16px; cursor: pointer; color: #666;
-  padding: 0 4px;
-}
-.ocr-close-btn:hover { color: #333; }
-.ocr-dialog-body { padding: 16px; overflow: auto; flex: 1; background: #f5f7fa; }
-.ocr-panel { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
-.ocr-upload-area {
-  min-height: 240px;
-  border: 2px dashed #d9d9d9;
-  border-radius: 10px;
-  background: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  overflow: hidden;
-  transition: border-color .2s;
-}
-.ocr-upload-area:hover { border-color: #409eff; }
-.ocr-file-input { display: none; }
-.ocr-upload-placeholder { text-align: center; color: #606266; padding: 20px; }
-.ocr-upload-icon { font-size: 40px; margin-bottom: 8px; }
-.ocr-upload-placeholder p { margin: 6px 0 0; color: #a8abb2; font-size: 12px; }
-.ocr-preview-img { width: 100%; height: 240px; object-fit: contain; background: #fff; }
-.ocr-preview-panel {
-  min-height: 240px;
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 10px;
-  padding: 12px;
-}
-.ocr-dialog-footer {
-  display: flex; gap: 8px; justify-content: flex-end;
-  padding: 12px 16px;
-  border-top: 1px solid #eee;
-}
-.ocr-dialog-footer button {
-  padding: 6px 16px; border-radius: 6px; cursor: pointer;
-  border: 1px solid #409eff; background: #409eff; color: #fff;
-}
-.ocr-dialog-footer button:last-child {
-  background: #fff; color: #333; border-color: #ddd;
-}
-.ocr-dialog-footer button:disabled { opacity: .5; cursor: not-allowed; }
-.ocr-loading { color: #888; margin-top: 10px; }
-.ocr-progress { height: 6px; background: #ebeef5; border-radius: 999px; margin-top: 10px; overflow: hidden; }
-.ocr-progress span { display: block; height: 100%; background: #409eff; transition: width .2s; }
-.ocr-error { color: red; margin-top: 10px; }
-.ocr-result { margin-top: 12px; }
-.ocr-result textarea {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-  padding: 10px;
-  font-size: 13px;
-  line-height: 1.7;
-  resize: vertical;
-}
-.ocr-parsed {
-  margin-top: 16px;
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 10px;
-  padding: 14px;
-}
-.ocr-parsed-title { font-weight: 600; color: #303133; margin-bottom: 12px; }
-.ocr-field-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
-}
-.ocr-field-grid label {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  color: #606266;
-  font-size: 12px;
-}
-.ocr-field-grid input {
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  padding: 7px 8px;
-  font-size: 13px;
-}
-.ocr-extra {
-  margin-top: 12px;
-  color: #909399;
-  font-size: 12px;
-}
-.ocr-extra span {
-  display: inline-block;
-  margin: 4px 6px 0 0;
-  padding: 3px 8px;
-  background: #fdf6ec;
-  color: #e6a23c;
-  border-radius: 999px;
-}
-@media (max-width: 820px) {
-  .ocr-panel { grid-template-columns: 1fr; }
 }
 </style>
 

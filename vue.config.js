@@ -36,7 +36,16 @@ module.exports = {
       warnings: false,
       errors: true
     },
-    before: require('./mock/mock-server.js')
+    before: require('./mock/mock-server.js'),
+    proxy: {
+      // 代理百度AI接口，解决CORS问题
+      '/baidu-api': {
+        target: 'https://aip.baidubce.com',
+        changeOrigin: true,
+        secure: false,
+        pathRewrite: { '^/baidu-api': '' }
+      }
+    }
   },
   configureWebpack: {
     // provide the app's title in webpack's name field, so that
@@ -63,7 +72,7 @@ module.exports = {
 
     // when there are many pages, it will cause too many meaningless requests
     config.plugins.delete('prefetch')
-    config.optimization.splitChunks(false)
+
     // set svg-sprite-loader
     config.module
       .rule('svg')

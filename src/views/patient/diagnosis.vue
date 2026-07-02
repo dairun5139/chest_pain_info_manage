@@ -195,11 +195,10 @@ export default {
   data() {
     return {
       supplementNote: '',uiLoading: false,
-      _diagnosisCache: {}, // 缓存：key=patientId，value={diagnosis, treatment, care}
 
       switchDialog: { visible:false, loading:false, error:'', keyword:'', rawList:[], filtered:[], selectedId:null },
       patient: {
-        id: '2',
+        id: null,
         age: 46,
         gender: '男',
         name: '张勇',
@@ -409,31 +408,70 @@ export default {
         return Number.isFinite(n) && n > 0 ? n : null;
       } catch (e) { return null; }
     },
+
     getEffectivePatientId() {
-      const b = this.getIdFromUrlBeforeHash(); if (b) return b;
-      const h = this.getIdFromHashQuery(); if (h) return h;
+      // 1) URL hash 前参数（?id / ?patientId，在 # 前）
       try {
-        const q = this.$route && this.$route.query && (Number(this.$route.query.id) || Number(this.$route.query.patientId));
-        if (q) return q;
+        const b = this.getIdFromUrlBeforeHash && this.getIdFromUrlBeforeHash();
+        if (b) return b;
       } catch (_) {}
+
+      // 2) URL hash 后参数（#/xxx?id= / #/xxx?patientId=）
       try {
-        const s = this.$store && this.$store.getters && Number(this.$store.getters.patientId);
-        if (s) return s;
+        const h = this.getIdFromHashQuery && this.getIdFromHashQuery();
+        if (h) return h;
       } catch (_) {}
+
+      // 3) Vue Router 的 query 再兜底一遍
       try {
-        const l = Number(localStorage.getItem('patientId') || '');
-        if (l) return l;
+        const rqRaw = this.$route && this.$route.query && (this.$route.query.id || this.$route.query.patientId);
+        const rq = Number(rqRaw);
+        if (Number.isFinite(rq) && rq > 0) return rq;
       } catch (_) {}
+
+      // 4) 如果没有显式传 id，则使用首页/本页缓存的患者列表中“最新的那个”
+      try {
+        const list = (typeof _readPatListCache === 'function') ? _readPatListCache() : null;
+        if (Array.isArray(list) && list.length) {
+          const first = list[0] || {};
+          const rawId = first.id != null ? first.id : first.patientId;
+          const n = Number(rawId);
+          if (Number.isFinite(n) && n > 0) return n;
+        }
+      } catch (_) {}
+
+      // 5) 再兜底 Vuex store 中的 patientId
+      try {
+        const sRaw = this.$store && this.$store.getters && this.$store.getters.patientId;
+        const s = Number(sRaw);
+        if (Number.isFinite(s) && s > 0) return s;
+      } catch (_) {}
+
+      // 6) 再兜底 localStorage 中的 patientId
+      try {
+        const lRaw = localStorage.getItem('patientId') || localStorage.getItem('id') || '';
+        const l = Number(lRaw);
+        if (Number.isFinite(l) && l > 0) return l;
+      } catch (_) {}
+
+      // 7) 最后兜底：data 里本身的 patient.id
       const self = this.patient && Number(this.patient.id);
-      return self || null;
+      return Number.isFinite(self) && self > 0 ? self : null;
     },
+
     syncIdToAll(id) {
       const num = Number(id);
       if (!Number.isFinite(num) || num <= 0) return;
       try { if (this.patient) this.patient.id = num; } catch (_) {}
       try {
-        if (this.$store && this.$store.dispatch) {
-          this.$store.dispatch('user/Set_PatientID', num).catch(() => {});
+        if (this.$store) {
+          if (this.$store.commit && this.$store._mutations && this.$store._mutations['SET_PATIENT_ID']) {
+            this.$store.commit('SET_PATIENT_ID', num);
+          } else if (this.$store.dispatch && this.$store._actions && this.$store._actions['setPatientId']) {
+            this.$store.dispatch('setPatientId', num);
+          } else if (this.$store.state) {
+            this.$store.state.patientId = num;
+          }
         }
       } catch (_) {}
       try { localStorage.setItem('patientId', String(num)); } catch (_) {}
@@ -477,7 +515,7 @@ export default {
     closeSwitchDialog() { this.switchDialog.visible = false; },
     applyFilter() {
       const kw = (this.switchDialog.keyword || '').toLowerCase();
-      if (!kw) { this.switchDialog.filtered = this.switchDialog.rawList.slice(0, 2000); return; }
+      if (!kw) { this.switchDialog.filtered = this.switchDialog.rawList; return; }
       this.switchDialog.filtered = this.switchDialog.rawList.filter(p => {
         const name = (p.patientName || '').toLowerCase();
         const opId = (p.outpatientId || '').toLowerCase();
@@ -492,7 +530,7 @@ export default {
         const _cached = _readPatListCache();
         if (_cached && _cached.length) {
           this.switchDialog.rawList = _cached;
-          this.switchDialog.filtered = _cached.slice(0, 2000);
+          this.switchDialog.filtered = _cached;
           this.switchDialog.loading = false;
           this.switchDialog.error = "";
           return;
@@ -691,7 +729,9 @@ export default {
         this.echoText = ''
       }
 
-
+      if(this.patient && this.patient.id && typeof this.getAIDiagnosis === 'function'){
+        await this.getAIDiagnosis();
+      }
 
 
 
@@ -882,113 +922,126 @@ ECHO结果：${this.echoText || '无'}
     },
 
     async submitDiagnosis() {
-      if (this.uiLoading) return; // 防止重复点击
       this.uiLoading = true;
       try {
-        const cacheKey = String(this.patient.id || '')
-        if (!cacheKey) {
-          alert('未获取到患者ID，请返回患者列表重新进入')
-          return
-        }
-        const cached = this._diagnosisCache[cacheKey]
-        if (cached) {
-          // 同一患者已有结果，直接使用缓存，保持稳定性
-          this.patRecordsDTO.aiDiagnosis = cached.diagnosis
-          this.patRecordsDTO.aiDiagnosisTime = cached.diagnosisTime
-          this.patRecordsDTO.aiTreatmentProposal = cached.treatment
-          this.patRecordsDTO.aiTreatmentTime = cached.treatmentTime
-          this.patRecordsDTO.aiCareProposal = cached.care
-          this.patRecordsDTO.aiCareTime = cached.careTime
-        } else {
-          await this.fetchDiagnosis()
-          await this.fetchTreatment()
-          await this.fetchCare()
-          await this.submitAIDiagnosis()
-          // 缓存结果
-          this._diagnosisCache[cacheKey] = {
-            diagnosis: this.patRecordsDTO.aiDiagnosis,
-            diagnosisTime: this.patRecordsDTO.aiDiagnosisTime,
-            treatment: this.patRecordsDTO.aiTreatmentProposal,
-            treatmentTime: this.patRecordsDTO.aiTreatmentTime,
-            care: this.patRecordsDTO.aiCareProposal,
-            careTime: this.patRecordsDTO.aiCareTime,
-          }
-        }
-      } catch (e) {
-        console.error('一键诊断失败:', e)
-        alert('AI诊断请求失败，请检查网络连接后重试。错误：' + (e && e.message || String(e)))
+
+
+      // 添加这三行来更新卡片内容
+      await this.fetchDiagnosis()
+      await this.fetchTreatment()
+      await this.fetchCare()
+      await this.submitAIDiagnosis()
+
+        await this.$nextTick();
+        await this.waitUntil(() => !!(this.patRecordsDTO.aiDiagnosis && this.patRecordsDTO.aiTreatmentProposal && this.patRecordsDTO.aiCareProposal), 30000, 120);
       } finally {
         this.uiLoading = false;
       }
     },
     async fetchDiagnosis() {
-      // 模拟从数据库获取数据
-      // 实际应用中应替换为API请求
-      const prompt = '患者信息，患者' + this.patient.name + '，' + this.patient.age + '岁，' +
-        this.patient.gender + '性，因' + this.patient.complaint + '入院，体格检查结果：' + this.patient.physicalExam +
-        '，完成心电图、ct等辅助检查，结果为' + this.patient.assistExam + '，，心电图结果：' + this.show(this.ecgText) + '；CT结果：' + this.show(this.ctText) + '；ECHO结果：' + this.show(this.echoText) + '；补充说明：' + this.show(this.supplementNote) + '，临床诊断结果为：' + this.patient.diagnosis +
-        '，治疗建议：' + this.patient.treatment + '，用药记录：' + this.patient.medication + '，手术记录：' + this.patient.surgery +
-        ',护理记录：' + this.patient.nursing + ',随访记录：' + this.patient.followUp + '。你是一名具有30年主治经验的胸痛中心主治医生，请你根据以上胸痛患者的具体信息，给出专业的诊断结果。分成两部分进行回答，第一段是根据给出的患者信息进行思考推断（用文字整理清楚，并回答出来），第二段给出的病历诊断结果（详细丰富专业，150字左右），不要字体格式，不要写第一段第二段，仅返回第二段内容'
-      //console.log(prompt)
+      const prompt = '患者基本信息：' + this.patient.age + '岁' + this.patient.gender + '性患者，' +
+        '因' + this.patient.complaint + '入院，体格检查结果：' + this.patient.physicalExam +
+        '，完成心电图、CT等辅助检查，结果为' + this.patient.assistExam +
+        '，心电图结果：' + this.show(this.ecgText) +
+        '；CT结果：' + this.show(this.ctText) +
+        '；ECHO结果：' + this.show(this.echoText) +
+        '；补充说明：' + this.show(this.supplementNote) +
+        '，临床诊断结果为：' + this.patient.diagnosis +
+        '，治疗建议：' + this.patient.treatment +
+        '，用药记录：' + this.patient.medication +
+        '，手术记录：' + this.patient.surgery +
+        '，护理记录：' + this.patient.nursing +
+        '，随访记录：' + this.patient.followUp +
+        '。你是一名具有30年主治经验的胸痛中心主治医生，请你根据以上胸痛患者的具体信息，给出专业的诊断结果。分成两部分进行回答，第一段是根据给出的患者信息进行思考推断（用文字整理清楚，并回答出来），第二段给出的病历诊断结果（详细丰富专业，150字左右），不要字体格式，不要写第一段第二段，仅返回第二段内容'
       this.syncSupplementFromDiagnosis();
       const response = await sendOpenAIRequest(prompt)
-      //console.log(response.choices[0].message.content)
       this.patRecordsDTO.aiDiagnosis = this.processTreatmentText(response.choices[0].message.content).trim()
       this.patRecordsDTO.aiDiagnosisTime = new Date()
     },
     async fetchTreatment() {
-      const prompt = '患者信息，患者' + this.patient.name + '，' + this.patient.age + '岁，' +
-        this.patient.gender + '性，因' + this.patient.complaint + '入院，体格检查结果：' + this.patient.physicalExam +
-        '，完成心电图、ct等辅助检查，结果为' + this.patient.assistExam + '，，心电图结果：' + this.show(this.ecgText) + '；CT结果：' + this.show(this.ctText) + '；ECHO结果：' + this.show(this.echoText) + '；补充说明：' + this.show(this.supplementNote) + '，临床诊断结果为：' + this.patient.diagnosis +
-        '，治疗建议：' + this.patient.treatment + '，用药记录：' + this.patient.medication + '，手术记录：' + this.patient.surgery +
-        ',护理记录：' + this.patient.nursing + ',随访记录：' + this.patient.followUp + '。你是具有30年主治经验的胸痛中心主治医生，请你根据以上胸痛患者的信息，并结合上面给出的诊断结果，给出专业的治疗方案，治疗方案需要专业，多维度考虑。（200字左右），不要字体格式，不显示*号'
+      const prompt = '患者基本信息：' + this.patient.age + '岁' + this.patient.gender + '性患者，' +
+        '因' + this.patient.complaint + '入院，体格检查结果：' + this.patient.physicalExam +
+        '，完成心电图、CT等辅助检查，结果为' + this.patient.assistExam +
+        '，心电图结果：' + this.show(this.ecgText) +
+        '；CT结果：' + this.show(this.ctText) +
+        '；ECHO结果：' + this.show(this.echoText) +
+        '；补充说明：' + this.show(this.supplementNote) +
+        '，临床诊断结果为：' + this.patient.diagnosis +
+        '，治疗建议：' + this.patient.treatment +
+        '，用药记录：' + this.patient.medication +
+        '，手术记录：' + this.patient.surgery +
+        '，护理记录：' + this.patient.nursing +
+        '，随访记录：' + this.patient.followUp +
+        '。你是具有30年主治经验的胸痛中心主治医生，请你根据以上胸痛患者的信息，并结合上面给出的诊断结果，给出专业的治疗方案，治疗方案需要专业，多维度考虑。（200字左右），不要字体格式，不显示*号'
       this.syncSupplementFromDiagnosis();
       const response = await sendOpenAIRequest(prompt)
-      //console.log(response.choices[0].message.content)
       this.patRecordsDTO.aiTreatmentProposal = this.processTreatmentText(response.choices[0].message.content).trim()
       this.patRecordsDTO.aiTreatmentTime = new Date()
     },
     async fetchCare() {
-      const prompt = '患者信息，患者' + this.patient.name + '，' + this.patient.age + '岁，' +
-        this.patient.gender + '性，因' + this.patient.complaint + '入院，体格检查结果：' + this.patient.physicalExam +
-        '，完成心电图、ct等辅助检查，结果为' + this.patient.assistExam + '，，心电图结果：' + this.show(this.ecgText) + '；CT结果：' + this.show(this.ctText) + '；ECHO结果：' + this.show(this.echoText) + '；补充说明：' + this.show(this.supplementNote) + '，临床诊断结果为：' + this.patient.diagnosis +
-        '，治疗建议：' + this.patient.treatment + '，用药记录：' + this.patient.medication + '，手术记录：' + this.patient.surgery +
-        ',护理记录：' + this.patient.nursing + ',随访记录：' + this.patient.followUp + '。你是具有30年护理经验的胸痛中心护理主任，请你在前面给出的患者信息、诊断结果、治疗方案的基础上，针对该患者给出专业的护理方案。不要字体格式，分点作答（200字左右）'
+      const prompt = '患者基本信息：' + this.patient.age + '岁' + this.patient.gender + '性患者，' +
+        '因' + this.patient.complaint + '入院，体格检查结果：' + this.patient.physicalExam +
+        '，完成心电图、CT等辅助检查，结果为' + this.patient.assistExam +
+        '，心电图结果：' + this.show(this.ecgText) +
+        '；CT结果：' + this.show(this.ctText) +
+        '；ECHO结果：' + this.show(this.echoText) +
+        '；补充说明：' + this.show(this.supplementNote) +
+        '，临床诊断结果为：' + this.patient.diagnosis +
+        '，治疗建议：' + this.patient.treatment +
+        '，用药记录：' + this.patient.medication +
+        '，手术记录：' + this.patient.surgery +
+        '，护理记录：' + this.patient.nursing +
+        '，随访记录：' + this.patient.followUp +
+        '。你是具有30年护理经验的胸痛中心护理主任，请你在前面给出的患者信息、诊断结果、治疗方案的基础上，针对该患者给出专业的护理方案。不要字体格式，分点作答（200字左右）'
       this.syncSupplementFromDiagnosis();
       const response = await sendOpenAIRequest(prompt)
-      //console.log(response.choices[0].message.content)
       this.patRecordsDTO.aiCareProposal  = this.processTreatmentText(response.choices[0].message.content).trim()
       this.patRecordsDTO.aiCareTime = new Date()
-      // this.careResult = await this.mockFetch('护理方案示例');
     },
     processTreatmentText(text) {
 
+      if (!text) {
+        return '';
+      }
+
       const separatorRegex = /(?<=[:：。；])/g;
       let segments = text.split(separatorRegex);
-      segments = segments.filter(segment => segment.trim() !== "").map(segment => segment.trim());
-      const hasExistingNumbering = /^\s*\d+\.\s+/.test(segments);
+      segments = segments.map(segment => segment.trim()).filter(segment => segment !== '');
+      if (!segments.length) {
+        return '';
+      }
+
+      // 检测是否已经存在类似 “1. xxx” / “2. xxx” 的编号
+      let hasExistingNumbering = segments.some(seg => /^\s*\d+[\.、]\s+/.test(seg));
 
       if (hasExistingNumbering) {
-        // 已有标号，仅添加换行
-        return `${segments.join("\n")}`;
+        // 先处理可能的双重序号：如 "1. 1. 内容"、"4. 2. 内容"
+        segments = segments.map(seg =>
+          seg.replace(/^\s*\d+\.\s*(\d+[\.、]\s+)/, '$1')
+        );
+        // 已有标号，仅按句子换行，不再重复加编号
+        return segments.join("\n");
       } else {
         // 检查第一句末尾是否包含冒号
-        const firstSegmentHasColon = segments.length > 0 && (segments[0].endsWith('：')||segments[0].endsWith(':'));
-        //console.log('标号：' + firstSegmentHasColon)
+        const firstSegmentHasColon =
+          segments.length > 0 && (segments[0].endsWith('：') || segments[0].endsWith(':'));
         let processedAfter;
         if (firstSegmentHasColon && segments.length > 1) {
           // 第一句有冒号且有后续句子：第一句不加标号，从第二句开始加
           const firstSegment = segments[0];
-          const numberedSegments = segments.slice(1)
+          const numberedSegments = segments
+            .slice(1)
             .map((segment, index) => `${index + 1}. ${segment}`);
 
           processedAfter = [firstSegment, ...numberedSegments].join("\n");
         } else {
-          // 第一句没有冒号，或只有一句：全部从1开始加标号
-          processedAfter = segments.map((segment, index) => `${index + 1}. ${segment}`).join("\n");
+          // 第一句没有冒号，或只有一句：全部从 1 开始加标号
+          processedAfter = segments
+            .map((segment, index) => `${index + 1}. ${segment}`)
+            .join("\n");
         }
 
-        return `${processedAfter}`;
+        return processedAfter;
       }
     },
     mockFetch(result) {

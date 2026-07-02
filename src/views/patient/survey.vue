@@ -30,6 +30,19 @@
       </div>
     </div>
 
+    <div class="patient-qr-card">
+      <div class="qr-main">
+        <h3>病人端随访问卷</h3>
+        <p>固定问卷星随访入口，可直接复制链接或让病人扫码填写。</p>
+        <div class="qr-link">{{ followUpLink }}</div>
+        <button class="button-search" @click="copyFollowUpLink">复制链接</button>
+        <button class="button-search secondary" @click="openFollowUpLink">打开问卷</button>
+      </div>
+      <div class="qr-box">
+        <img :src="followUpQrUrl" alt="随访问卷二维码">
+      </div>
+    </div>
+
     <div class="form-row">
       <label>是否随访：</label>
       <div class="radio-group">
@@ -274,6 +287,7 @@ import { verifySettle } from '@/api/dayreport'
 import { getToken } from '@/utils/auth'
 import axios from 'axios'
 import { API_URL } from '@/api/constants'
+const FIXED_FOLLOW_UP_FORM_URL = 'https://v.wjx.cn/vm/eu69rd3.aspx#'
 // [CACHE-BEGIN] 患者列表简单缓存（10分钟）
 const PAT_LIST_CACHE_KEY = 'PAT_FRONT_LIST_CACHE_V1';
 const PAT_LIST_CACHE_TTL =  10 * 60 * 1000; // 10分钟
@@ -372,6 +386,12 @@ export default {
     },
   computed: {
     urlPatientId() { return String(this.$route && (this.$route.query.patientId || (this.$route.params && this.$route.params.patientId)) || ''); },
+    followUpLink() {
+      return FIXED_FOLLOW_UP_FORM_URL
+    },
+    followUpQrUrl() {
+      return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(this.followUpLink)}`
+    },
 
     // 仅显示提交时间不晚于“此刻”的随访记录；无法解析时间的记录保留显示
     visibleFollowList() {
@@ -413,6 +433,23 @@ export default {
       pairedDoctors = pairedDoctors.filter(str => str !== '门诊医生：医技医生');
 
       return pairedDoctors.join('，')
+    },
+    copyFollowUpLink() {
+      this.copyText(this.followUpLink, '链接已复制')
+    },
+    openFollowUpLink() {
+      window.open(this.followUpLink, '_blank')
+    },
+    copyText(text, successText) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          this.$message && this.$message.success ? this.$message.success(successText) : alert(successText)
+        }).catch(() => {
+          window.prompt('复制链接', text)
+        })
+      } else {
+        window.prompt('复制链接', text)
+      }
     },
     formatDate(val) {
       if (val === null || val === undefined || val === '') return '';
@@ -793,6 +830,93 @@ initCharts() {},
   justify-content: space-between;
   /* 在主轴方向拉开空间 */
 
+}
+
+.patient-qr-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.qr-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.patient-qr-card h3 {
+  margin: 0 0 8px;
+}
+
+.patient-qr-card p {
+  margin: 0 0 10px;
+  color: #606266;
+}
+
+.qr-config {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.qr-config input {
+  flex: 1;
+  min-width: 260px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.qr-box {
+  width: 150px;
+  height: 150px;
+  flex: 0 0 150px;
+  background: #fff;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qr-box img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.qr-link {
+  margin-bottom: 10px;
+  color: #409eff;
+  word-break: break-all;
+}
+
+.qr-link.empty,
+.qr-placeholder {
+  color: #909399;
+}
+
+.qr-placeholder {
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.button-search.secondary {
+  margin-left: 8px;
+}
+
+.button-search:disabled {
+  opacity: .55;
+  cursor: not-allowed;
 }
 
 .info-row {

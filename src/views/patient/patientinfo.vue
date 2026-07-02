@@ -6,10 +6,11 @@
     </div>
 
     <div class="info-container">
-      <div class="info-item">
+      <div class="info-item" :style="patient.isWarning ? 'background:#f56c6c; color:#fff;' : ''">
         <p>门诊ID信息: <strong>{{ patient.outPatientId }}</strong></p>
-        <p>姓名: <strong>{{ patient.patientName }}</strong></p>
-
+        <p>姓名: <strong>{{ patient.patientName }}</strong>
+          <span v-if="patient.isWarning" class="warning-badge" :title="patient.warningReason">⚠ 预警</span>
+        </p>
       </div>
       <div class="info-item">
         <p>性别: <strong>{{ patient.gender }}</strong></p>
@@ -71,48 +72,74 @@
       </div>
     </div>
 
-    <div class="record-container">
-      <div class="card" style="flex: 0 0 68%; ">
-        <div class="table-controll">
-          <h4>行医记录</h4>
-          <table>
-            <thead>
-              <tr>
-                <th>No</th>
-                <th>医疗处方</th>
-                <th>开始时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(record, index) in patient.medicalRecords" :key="index">
-                <td>{{ record.No }}</td>
-                <td>{{ record.item }}</td>
-                <td>{{ formatDate(record.time) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="card">
-        <div class="table-controll">
-          <h4>行医质控</h4>
-          <table>
-            <thead>
-              <tr>
-                <th>项目</th>
-                <th>结果</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(record, index) in patient.qualitycontrol" :key="index">
-                <td>{{ record.item }}</td>
-                <td :class="{'text-green': record.result === '合格', 'text-red': record.result === '不合格'}"> {{ record.result }}</td>
+    <!-- 行医记录和行医质控区域已隐藏（需求6） -->
+    <!-- <div class="record-container"> ... </div> -->
 
-              </tr>
-            </tbody>
-          </table>
-        </div>
+    <!-- 智能问诊（原"智能诊断"独立页面合并而来） -->
+    <div class="ai-checkbox-all">
+      <h3>智能问诊</h3>
+
+      <h4>患者主诉:</h4>
+      <div class="ai-checkbox-group">
+        <label v-for="(item, index) in complaints" :key="'complaint'+index" class="ai-checkbox-item">
+          <input v-model="item.checked" type="checkbox" @click="$nextTick(checkDiagnosis)"> {{ item.label }}
+          <span v-if="item.label === '其他'">
+            <input v-model="otherComplaint" type="text" placeholder="请填写其他主诉" @change="checkDiagnosis">
+          </span>
+        </label>
       </div>
+
+      <h4>既往病史:</h4>
+      <div class="ai-checkbox-group">
+        <label v-for="(item, index) in pastHistory" :key="'history'+index" class="ai-checkbox-item">
+          <input v-model="item.checked" type="checkbox" @click="$nextTick(checkDiagnosis)"> {{ item.label }}
+          <span v-if="item.label === '其他'">
+            <input v-model="otherHistory" type="text" placeholder="请填写其他病史" @change="checkDiagnosis">
+          </span>
+        </label>
+      </div>
+
+      <h4>已完成检查结果或报告:</h4>
+      <div class="ai-checkbox-group">
+        <label v-for="(item, index) in exams" :key="'exam'+index" class="ai-checkbox-item">
+          <input v-model="item.checked" type="checkbox" @click="$nextTick(checkDiagnosis)"> {{ item.label }}
+          <span v-if="item.label === '其他'">
+            <input v-model="otherExam" type="text" placeholder="请填写其他检查" @change="checkDiagnosis">
+          </span>
+        </label>
+      </div>
+
+      <textarea
+        v-model="aiDiagnosisDraft"
+        class="ai-text-area"
+        placeholder="大模型辅助智能疾病诊断..."
+        rows="12"
+        style="min-height: 220px;"
+        @focus="handleDiagnosisFocus"
+        @blur="handleDiagnosisBlur"
+        @input="handleDiagnosisInput"
+      ></textarea>
+      <button class="ai-diagnosis-button" @click="submitDiagnosis">一键诊断</button>
+    </div>
+
+    <div class="ai-card-container">
+      <div class="ai-card">
+        <div class="ai-card-header">诊断结果</div>
+        <div class="ai-card-content">{{ patRecordsDTO.aiDiagnosis }}</div>
+      </div>
+      <div class="ai-card">
+        <div class="ai-card-header">治疗方案</div>
+        <div class="ai-card-content">{{ patRecordsDTO.aiTreatmentProposal }}</div>
+      </div>
+      <div class="ai-card">
+        <div class="ai-card-header">护理方案</div>
+        <div class="ai-card-content">{{ patRecordsDTO.aiCareProposal }}</div>
+      </div>
+    </div>
+
+    <div v-if="uiLoading" class="ai-waiting-overlay">
+      <div class="ai-spinner"></div>
+      <div class="ai-waiting-text">正在生成，请稍候…</div>
     </div>
 
     <div v-if="analysisResult" class="analysis-popup">
@@ -179,7 +206,8 @@
 <script>
 import { getToken } from '@/utils/auth'
 import axios from 'axios'
-import { API_URL } from '@/api/constants'
+import { API_URL, sendOpenAIRequest } from '@/api/constants'
+import { buildVitalsWarning } from '@/utils/vitalsWarning'
 
 
 // [CACHE-BEGIN] 患者列表简单缓存（10分钟）
@@ -239,38 +267,25 @@ export default {
         age: 65,
         diagnosis: '心脏病',
         medicalHistory: '无',
-        ecgRecords: [
-          {
-            time: '2025-04-01',
-            diagnosis: '心律不齐',
-            image: require('@/assets/images/ECG/ecg.jpg'), // 替换为实际路径
-            analysis: '心电图显示轻度心律不齐，建议继续观察。'
-          }
-
-        ],
-        ctRecords: [
-          {
-            time: '2025-04-01',
-            diagnosis: '局部阴影',
-            image: require('@/assets/images/CT/ct.jpg'), // 替换为实际路径
-            analysis: 'CT检查发现局部阴影，建议进一步检查。'
-          }
-        ],
-        echoRecords: [
-          {
-            time: '2025-04-01',
-            diagnosis: '瓣膜功能不全',
-            image: require('@/assets/images/Echo/xc.jpg'), // 替换为实际路径
-            analysis: '超声检查显示瓣膜功能不全，建议随访。'
-          }
-        ],
+        complaint: '胸痛、气短',
+        physicalExam: '心率正常，血压稳定。',
+        assistExam: '心电图正常，CT显示无异常。',
+        treatment: '建议住院观察，控制心率。',
+        medication: '阿莫西林，一天三次。',
+        surgery: '无',
+        nursing: '定期监测生命体征。',
+        followUp: '一周后复查。',
+        pastHistory: '糖尿病',
+        ecgRecords: [],
+        ctRecords: [],
+        echoRecords: [],
         medicalRecords: [
 
 
         ],
         qualitycontrol: [
           { item: '入院检查', result: '合格' },
-          { item: '心电图', result: '不合格' },
+          { item: '心电图', result: '合格' },
           { item: 'CT', result: '合格' },
           { item: '心脏彩超', result: '合格' }
         ]
@@ -278,8 +293,54 @@ export default {
       selectedEcg: {diagnosis: null,image:null},
       selectedCt: {diagnosis: null,image:null},
       selectedEcho: {diagnosis: null,image:null},
-      analysisResult: null
+      analysisResult: null,
+
+      // ===== 智能问诊（原 diagnosis.vue 合并而来） =====
+      complaints: [
+        { label: '呼吸困难', checked: false },
+        { label: '胸痛', checked: false },
+        { label: '背痛', checked: false },
+        { label: '不明原因的疼痛', checked: false },
+        { label: '其他', checked: false }
+      ],
+      pastHistory: [
+        { label: '高血压', checked: false },
+        { label: '高血脂', checked: false },
+        { label: '糖尿病', checked: false },
+        { label: '脑卒中', checked: false },
+        { label: '心律失常', checked: false },
+        { label: '其他', checked: false }
+      ],
+      exams: [
+        { label: '首份心电图', checked: false },
+        { label: '血液检查', checked: false },
+        { label: '心脏彩超', checked: false },
+        { label: 'CT影像报告', checked: false },
+        { label: '其他', checked: false }
+      ],
+      patRecordsDTO: {
+        aiCareProposal: '',
+        aiCareTime: '',
+        aiDiagnosis: '',
+        aiDiagnosisTime: '',
+        aiTreatmentProposal: '',
+        aiTreatmentTime: '',
+        patientId: 0
+      },
+      aiDiagnosisDraft: '',
+      otherComplaint: '',
+      otherHistory: '',
+      otherExam: '',
+      supplementNote: '',
+      uiLoading: false
     }
+  },
+  watch: {
+    aiDiagnosisDraft() { this.syncSupplementFromDiagnosis() },
+    complaints: { deep: true, handler() { this.checkDiagnosis() } },
+    pastHistory: { deep: true, handler() { this.checkDiagnosis() } },
+    exams: { deep: true, handler() { this.checkDiagnosis() } },
+    supplementNote() { this.checkDiagnosis() }
   },
   beforeRouteUpdate(to, from, next) {
     // 路由参数变化时（同一组件切换患者）重新加载数据
@@ -302,7 +363,11 @@ export default {
     })
   },
   activated() {
-    // keep-alive 激活时，如果 store 里的 patientId 和当前不一致则重新加载
+    // keep-alive 激活时清空上次AI诊断结果，避免残留内容显示
+    this.patRecordsDTO.aiDiagnosis = ''
+    this.patRecordsDTO.aiTreatmentProposal = ''
+    this.patRecordsDTO.aiCareProposal = ''
+    // 如果 store 里的 patientId 和当前不一致则重新加载
     try {
       const storeId = Number(this.$store.getters.patientId) || null
       if (storeId && storeId !== this.patient.id) {
@@ -534,6 +599,10 @@ export default {
     },
 
     async getPatientData() {
+      // 每次加载新患者数据时清空上次AI诊断结果，避免残留
+      this.patRecordsDTO.aiDiagnosis = ''
+      this.patRecordsDTO.aiTreatmentProposal = ''
+      this.patRecordsDTO.aiCareProposal = ''
       const id = this.patient.id
       console.log('id:' + id)
       console.log('id:' + typeof id)
@@ -558,6 +627,18 @@ export default {
         const patientData = response.data.data
         console.log(patientData)
         Object.assign(this.patient, patientData)
+
+        // 预警判断：infoone 有数据就直接用，没有从 Vuex store 兜底
+        let vitalsSource = this.patient
+        if (!vitalsSource.pulse && !vitalsSource.bloodPressure) {
+          const storeList = this.$store.getters.patientList
+          const matched = storeList && storeList.find(p => String(p.id) === String(id))
+          if (matched) vitalsSource = matched
+        }
+        const warning = buildVitalsWarning(vitalsSource)
+        this.$set(this.patient, 'isWarning', warning.isWarning)
+        this.$set(this.patient, 'warningReason', warning.warningReason)
+
         console.log(this.patient)
       } else {
         this.loading = false
@@ -581,6 +662,21 @@ export default {
       if (response0.data.code === 200) {
         const patientData = response0.data.data
         this.patient.diagnosis = patientData.dischargeDiagnosis
+        this.patient.complaint = patientData.chiefComplaint || this.patient.complaint
+        this.patient.treatment = patientData.treatmentPlan || this.patient.treatment
+        this.patient.medication = patientData.dischargeMedications || this.patient.medication
+        this.patient.pastHistory = patientData.pastHistory || this.patient.pastHistory
+        this.patient.nursing = patientData.specialNursing || this.patient.nursing
+        this.patient.followUp = patientData.followUpPlan || this.patient.followUp
+
+        // 智能问诊：根据病史/主诉文本，自动勾选对应的选项
+        this.pastHistory.forEach(item => {
+          item.checked = !!(this.patient.pastHistory && String(this.patient.pastHistory).includes(item.label))
+        })
+        this.complaints.forEach(item => {
+          item.checked = !!(this.patient.complaint && String(this.patient.complaint).includes(item.label))
+        })
+        this.updateComplaintsByMinTwoChars(this.exams, this.patient.treatment || '')
       } else {
         this.loading = false
       }
@@ -596,14 +692,15 @@ export default {
       console.log(response1)
 
       if (response1.data.code === 200) {
-        this.patient.ecgRecords[0].time = new Date(response1.data.data.checkTime).toISOString().split('T')[0]
-        this.patient.ecgRecords[0].diagnosis = response1.data.data.ecgDiagnosis
-        this.patient.ecgRecords[0].filePath = response1.data.data.filePath
-        this.patient.ecgRecords[0].analysis = '无'
-
-        console.log(this.ecgRecords)
-      } else {
-        //this.loading = false
+        const ecgRecord = {
+          time: new Date(response1.data.data.checkTime).toISOString().split('T')[0],
+          diagnosis: response1.data.data.ecgDiagnosis,
+          filePath: response1.data.data.filePath,
+          analysis: '无',
+          image: null
+        }
+        this.$set(this.patient, 'ecgRecords', [ecgRecord])
+        console.log(this.patient.ecgRecords)
       }
       this.selectedEcg = this.patient.ecgRecords[0]
       this.updateEcg()
@@ -620,14 +717,15 @@ export default {
 
 
       if (response2.data.code === 200) {
-        this.patient.ctRecords[0].time = new Date(response2.data.data.checkTime).toISOString().split('T')[0]
-        this.patient.ctRecords[0].diagnosis = response2.data.data.ctDiagnosis
-        this.patient.ctRecords[0].filePath = response2.data.data.filePath
-        this.patient.ctRecords[0].analysis = '无'
-
-        console.log(this.ecgRecords)
-      } else {
-        //this.loading = false
+        const ctRecord = {
+          time: new Date(response2.data.data.checkTime).toISOString().split('T')[0],
+          diagnosis: response2.data.data.ctDiagnosis,
+          filePath: response2.data.data.filePath,
+          analysis: '无',
+          image: null
+        }
+        this.$set(this.patient, 'ctRecords', [ctRecord])
+        console.log(this.patient.ctRecords)
       }
 
       this.selectedCt = this.patient.ctRecords[0]
@@ -644,14 +742,15 @@ export default {
       console.log(response3)
 
       if (response3.data.code === 200) {
-        this.patient.echoRecords[0].time = new Date(response3.data.data.checkTime).toISOString().split('T')[0]
-        this.patient.echoRecords[0].diagnosis = response3.data.data.echoDiagnosis
-        this.patient.echoRecords[0].filePath = response3.data.data.filePath
-        this.patient.echoRecords[0].analysis = '无'
-
-        console.log(this.ecgRecords)
-      } else {
-        //this.loading = false
+        const echoRecord = {
+          time: new Date(response3.data.data.checkTime).toISOString().split('T')[0],
+          diagnosis: response3.data.data.echoDiagnosis,
+          filePath: response3.data.data.filePath,
+          analysis: '无',
+          image: null
+        }
+        this.$set(this.patient, 'echoRecords', [echoRecord])
+        console.log(this.patient.echoRecords)
       }
 
 
@@ -670,18 +769,24 @@ export default {
       console.log(response4)
 
       if (response4.data.code === 200) {
-        const patientData = response4.data.data[id - 1]
-        this.patient.medicalRecords = [
-          { No: 1, item: '发病时间', time: patientData.onsetTime },
-          { No: 2, item: '首次医疗时间', time: patientData.firstMedicalTime },
-          { No: 3, item: '心电图完成时间', time: patientData.ecgTime },
-          { No: 4, item: '肌钙蛋白报告时间', time: patientData.troponinTime },
-          { No: 5, item: '球囊扩张时间', time: patientData.dilationTime },
-          { No: 6, item: '溶栓开始时间', time: patientData.thrombolysisTime },
-          { No: 7, item: '绿色通道启动时间', time: patientData.greenChannelTime }
-        ]
-      } else {
-        //this.loading = false
+        const raw = response4.data.data
+        // 接口返回全量数组，用id字段匹配当前患者；若返回单个对象直接用
+        const patientData = Array.isArray(raw)
+          ? (raw.find(item => Number(item.id) === Number(id)) || null)
+          : raw
+        if (patientData) {
+          this.patient.medicalRecords = [
+            { No: 1, item: '发病时间',         time: patientData.onsetTime },
+            { No: 2, item: '首次医疗时间',     time: patientData.firstMedicalTime },
+            { No: 3, item: '心电图完成时间',   time: patientData.ecgTime },
+            { No: 4, item: '肌钙蛋白报告时间', time: patientData.troponinTime },
+            { No: 5, item: '球囊扩张时间',     time: patientData.dilationTime },
+            { No: 6, item: '溶栓开始时间',     time: patientData.thrombolysisTime },
+            { No: 7, item: '绿色通道启动时间', time: patientData.greenChannelTime }
+          ]
+        } else {
+          console.warn('timenode 返回数据为空，id:', id)
+        }
       }
 
       const response5 = await (this.$axios && this.$axios.post ? this.$axios.post : axios.post)(API_URL + 'pat/singletimemanagement', null, {
@@ -695,21 +800,32 @@ export default {
       console.log(response5)
 
       if (response5.data.code === 200) {
-        const patientData = response5.data.data[id - 1]
-        const isQualified = (v) => v === 'TRUE' || v === true || v === 1 || String(v).toUpperCase() === 'TRUE'
+        // singletimemanagement 返回单个对象，直接取 data，不能用 data[id-1] 数组方式
+        const patientData = response5.data.data
+        // 合规判断：与行医轨迹一致，用时字段为空/无数据时默认合格，有值才比对阈值
+        const qualify = (v, limit) => {
+          if (v === null || v === undefined || v === '' || v === '/') return true
+          const n = Number(v)
+          return !Number.isFinite(n) || n <= limit
+        }
         this.patient.qualitycontrol = [
-          { item: '门诊到球囊扩张', result: isQualified(patientData.doorToBalloonQualified) ? '合格' : '不合格' },
-          { item: '门诊到CCU', result: isQualified(patientData.doorToCcuQualified) ? '合格' : '不合格' },
-          { item: '球囊扩张', result: isQualified(patientData.fmcToBalloonQualified) ? '合格' : '不合格' },
-          { item: '心电图', result: isQualified(patientData.fmcToEcgQualified) ? '合格' : '不合格' },
-          { item: 'End', result: isQualified(patientData.fmcToEndQualified) ? '合格' : '不合格' },
-          { item: '溶栓', result: isQualified(patientData.fmcToThrombolysisQualified) ? '合格' : '不合格' },
-          { item: '肌钙蛋白', result: isQualified(patientData.fmcToTroponinQualified) ? '合格' : '不合格' }
+          { item: '入院检查', result: '合格' },
+          { item: '心电图', result: qualify(patientData.fmcToEcgInterval, 10) ? '合格' : '不合格' },
+          { item: 'CT', result: qualify(patientData.doorToCtInterval, 60) ? '合格' : '不合格' },
+          { item: '心脏彩超', result: qualify(patientData.doorToEchoInterval, 10) ? '合格' : '不合格' }
         ]
 
         console.log(this.ecgRecords)
       } else {
         //this.loading = false
+      }
+
+      // 智能问诊：根据上面已获取到的病历信息自动生成问诊文本
+      try {
+        await this.checkDiagnosis()
+        this.syncSupplementFromDiagnosis()
+      } catch (e) {
+        console.warn('智能问诊初始化失败', e)
       }
     },
     viewMedicalRecord() {
@@ -857,6 +973,196 @@ export default {
         console.error('请求出错:', error)
         this.loading = false
       }
+    },
+
+    // ===== 智能问诊（原 diagnosis.vue 合并而来） =====
+    updateComplaintsByMinTwoChars(list, targetString) {
+      const target = targetString || ''
+      list.forEach(item => {
+        const labelChars = [...item.label]
+        let matchCount = 0
+        for (const char of labelChars) {
+          if (target.includes(char)) {
+            matchCount++
+            if (matchCount >= 2) break
+          }
+        }
+        if (matchCount >= 2) {
+          item.checked = true
+        }
+      })
+    },
+    async checkDiagnosis() {
+      const selectedComplaints = this.complaints
+        .filter(item => item.checked)
+        .map(item => item.label)
+      if (this.otherComplaint) selectedComplaints.push(this.otherComplaint)
+
+      const selectedHistory = this.pastHistory
+        .filter(item => item.checked)
+        .map(item => item.label)
+      if (this.otherHistory) selectedHistory.push(this.otherHistory)
+
+      const selectedExams = this.exams
+        .filter(item => item.checked)
+        .map(item => item.label)
+      if (this.otherExam) selectedExams.push(this.otherExam)
+
+      const ecgText = (this.selectedEcg && this.selectedEcg.diagnosis) || ''
+      const ctText = (this.selectedCt && this.selectedCt.diagnosis) || ''
+      const echoText = (this.selectedEcho && this.selectedEcho.diagnosis) || ''
+
+      this.aiDiagnosisDraft = `
+患者主诉: ${selectedComplaints.join(', ') || '无'}
+既往病史: ${selectedHistory.join(', ') || '无'}
+已完成检查: ${selectedExams.join(', ') || '无'}
+诊断结果： ${this.patient.diagnosis}
+心电图结果：${ecgText || '无'}
+CT结果：${ctText || '无'}
+ECHO结果：${echoText || '无'}
+补充说明：${this.supplementNote && this.supplementNote.trim() ? this.supplementNote.trim() : '(可编辑)'}
+
+      `.trim()
+    },
+    async getAIDiagnosis() {
+      const id = this.patient.id
+      const token = getToken()
+      const response = await axios.post(API_URL + 'hospital/records', null, {
+        params: { id: id },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token
+        }
+      })
+      if (response.data.code === 200 && response.data.data && response.data.data[0]) {
+        const diagnosis = response.data.data[0]
+        const { aiCareProposal, aiCareTime, aiDiagnosis, aiDiagnosisTime, aiTreatmentProposal, aiTreatmentTime } = diagnosis
+        this.patRecordsDTO.aiDiagnosis = this.processTreatmentText(aiDiagnosis).trim()
+        this.patRecordsDTO.aiDiagnosisTime = aiDiagnosisTime
+        this.patRecordsDTO.aiCareProposal = this.processTreatmentText(aiCareProposal).trim()
+        this.patRecordsDTO.aiCareTime = aiCareTime
+        this.patRecordsDTO.aiTreatmentProposal = this.processTreatmentText(aiTreatmentProposal).trim()
+        this.patRecordsDTO.aiTreatmentTime = aiTreatmentTime
+      }
+    },
+    async submitAIDiagnosis() {
+      const token = getToken()
+      this.patRecordsDTO.patientId = this.patient.id
+      await axios.post(API_URL + 'hospital/records/add', this.patRecordsDTO, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token
+        }
+      })
+    },
+    async submitDiagnosis() {
+      this.uiLoading = true
+      try {
+        await this.fetchDiagnosis()
+        await this.fetchTreatment()
+        await this.fetchCare()
+        await this.submitAIDiagnosis()
+        await this.$nextTick()
+        await this.waitUntil(() => !!(this.patRecordsDTO.aiDiagnosis && this.patRecordsDTO.aiTreatmentProposal && this.patRecordsDTO.aiCareProposal), 30000, 120)
+      } finally {
+        this.uiLoading = false
+      }
+    },
+    async fetchDiagnosis() {
+      const prompt = this.buildAiPrompt('请你根据以上胸痛患者的具体信息，给出专业的诊断结果。分成两部分进行回答，第一段是根据给出的患者信息进行思考推断（用文字整理清楚，并回答出来），第二段给出的病历诊断结果（详细丰富专业，150字左右），不要字体格式，不要写第一段第二段，仅返回第二段内容', '你是一名具有30年主治经验的胸痛中心主治医生，')
+      this.syncSupplementFromDiagnosis()
+      const response = await sendOpenAIRequest(prompt)
+      this.patRecordsDTO.aiDiagnosis = this.processTreatmentText(response.choices[0].message.content).trim()
+      this.patRecordsDTO.aiDiagnosisTime = new Date()
+    },
+    async fetchTreatment() {
+      const prompt = this.buildAiPrompt('请你根据以上胸痛患者的信息，并结合上面给出的诊断结果，给出专业的治疗方案，治疗方案需要专业，多维度考虑。（200字左右），不要字体格式，不显示*号', '你是具有30年主治经验的胸痛中心主治医生，')
+      this.syncSupplementFromDiagnosis()
+      const response = await sendOpenAIRequest(prompt)
+      this.patRecordsDTO.aiTreatmentProposal = this.processTreatmentText(response.choices[0].message.content).trim()
+      this.patRecordsDTO.aiTreatmentTime = new Date()
+    },
+    async fetchCare() {
+      const prompt = this.buildAiPrompt('请你在前面给出的患者信息、诊断结果、治疗方案的基础上，针对该患者给出专业的护理方案。不要字体格式，分点作答（200字左右）', '你是具有30年护理经验的胸痛中心护理主任，')
+      this.syncSupplementFromDiagnosis()
+      const response = await sendOpenAIRequest(prompt)
+      this.patRecordsDTO.aiCareProposal = this.processTreatmentText(response.choices[0].message.content).trim()
+      this.patRecordsDTO.aiCareTime = new Date()
+    },
+    buildAiPrompt(instruction, role) {
+      const draftInfo = (this.aiDiagnosisDraft || '').trim()
+      return '以下是患者的基本信息：\n' + draftInfo +
+        '\n\n' + role + instruction
+    },
+    processTreatmentText(text) {
+      if (!text) return ''
+      const separatorRegex = /(?<=[:：。；])/g
+      let segments = text.split(separatorRegex)
+      segments = segments.map(segment => segment.trim()).filter(segment => segment !== '')
+      if (!segments.length) return ''
+
+      const hasExistingNumbering = segments.some(seg => /^\s*\d+[.、]\s+/.test(seg))
+      if (hasExistingNumbering) {
+        segments = segments.map(seg => seg.replace(/^\s*\d+\.\s*(\d+[.、]\s+)/, '$1'))
+        return segments.join('\n')
+      } else {
+        const firstSegmentHasColon = segments.length > 0 && (segments[0].endsWith('：') || segments[0].endsWith(':'))
+        if (firstSegmentHasColon && segments.length > 1) {
+          const firstSegment = segments[0]
+          const numberedSegments = segments.slice(1).map((segment, index) => `${index + 1}. ${segment}`)
+          return [firstSegment, ...numberedSegments].join('\n')
+        } else {
+          return segments.map((segment, index) => `${index + 1}. ${segment}`).join('\n')
+        }
+      }
+    },
+    handleDiagnosisInput() {
+      try {
+        if (!this.aiDiagnosisDraft) return
+        this.aiDiagnosisDraft = this.aiDiagnosisDraft.replace(/(补\s*充\s*说\s*明\s*[:：])\s*[（(]可编辑[）)]/g, '$1 ')
+      } catch (e) {}
+    },
+    handleDiagnosisBlur() {
+      try {
+        if (!this.aiDiagnosisDraft) return
+        const noContent = /(补\s*充\s*说\s*明\s*[:：])\s*(?:\n|$)/
+        if (noContent.test(this.aiDiagnosisDraft)) {
+          this.aiDiagnosisDraft = this.aiDiagnosisDraft.replace(noContent, '$1（可编辑）\n')
+        }
+      } catch (e) {}
+    },
+    handleDiagnosisFocus() {
+      try {
+        if (!this.aiDiagnosisDraft) return
+        this.aiDiagnosisDraft = this.aiDiagnosisDraft.replace(/(补\s*充\s*说\s*明\s*[:：])\s*[（(]可编辑[）)]/g, '$1 ')
+      } catch (e) {}
+    },
+    syncSupplementFromDiagnosis() {
+      try {
+        const txt = (this.aiDiagnosisDraft || '').toString()
+        const m = txt.match(/补\s*充\s*说\s*明\s*[:：]\s*([^\n]*)/)
+        const v = m && m[1] ? m[1].trim() : ''
+        this.supplementNote = v || ''
+      } catch (e) {
+        this.supplementNote = ''
+      }
+    },
+    show(value) {
+      if (typeof value === 'string') { const t = value.trim(); return t ? t : '无' }
+      return value ? String(value) : '无'
+    },
+    async waitUntil(cond, timeout = 30000, interval = 120) {
+      const start = Date.now()
+      return await new Promise((resolve) => {
+        const timer = setInterval(() => {
+          try {
+            if (cond()) { clearInterval(timer); resolve() }
+            else if (Date.now() - start > timeout) { clearInterval(timer); resolve() }
+          } catch (e) {
+            if (Date.now() - start > timeout) { clearInterval(timer); resolve() }
+          }
+        }, interval)
+      })
     }
   }
 }
@@ -880,6 +1186,18 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;}
+}
+
+.warning-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  background: #f56c6c;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: bold;
+  vertical-align: middle;
 }
 
 .info-container, .card-container, .record-container {
@@ -1030,4 +1348,105 @@ th {
   justify-content: space-between;
   align-items: center;
 }
+
+/* ===== 智能问诊样式（原 diagnosis.vue 合并而来，统一加 ai- 前缀避免与上面的卡片样式冲突） ===== */
+.ai-checkbox-all {
+  background-color: white;
+  margin: 0 10px 10px 10px;
+  border-radius: 10px;
+  padding: 15px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+.ai-checkbox-all h4 {
+  margin-bottom: 10px;
+}
+.ai-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: 2%;
+}
+.ai-checkbox-item {
+  margin-right: 20px;
+  display: flex;
+  align-items: center;
+}
+.ai-text-area {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  resize: vertical;
+}
+.ai-diagnosis-button {
+  margin-top: 10px;
+}
+.ai-card-container {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 10px 10px 10px;
+}
+.ai-card {
+  flex: 1;
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  padding: 15px;
+  margin: 0 10px;
+  display: flex;
+  flex-direction: column;
+}
+.ai-card-header {
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 10px;
+}
+.ai-card-content {
+  white-space: pre-wrap;
+  line-height: 1.5;
+  letter-spacing: 0.05em;
+  flex-grow: 1;
+}
+.ai-card-editable {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  background: #fafafa;
+  color: #222;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.ai-card-editable:focus {
+  border-color: #409eff;
+  background: #fff;
+}
+.ai-waiting-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.35);
+  z-index: 9999;
+  flex-direction: column;
+}
+.ai-spinner {
+  width: 64px;
+  height: 64px;
+  border: 6px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: ai-spin 1s linear infinite;
+}
+.ai-waiting-text {
+  margin-top: 12px;
+  color: #fff;
+  font-size: 14px;
+}
+@keyframes ai-spin { to { transform: rotate(360deg); } }
 </style>

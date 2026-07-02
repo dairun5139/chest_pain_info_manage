@@ -14,7 +14,8 @@ const getters = {
   roleId: state => state.user.roleId,
   id: state => state.user.id,
   deptId: state => state.user.deptId,
-  patientId: state => state.user.patientId
+  patientId: state => state.user.patientId,
+  patientList: state => state.user.patientList
 
 }
 export default getters

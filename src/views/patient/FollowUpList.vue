@@ -49,46 +49,38 @@
           <td>{{ item.gender }}</td>
           <td>{{ item.age }}</td>
           <td>{{ item.diagnosis }}</td>
-          <td>{{ formatTime(item.dischargeTime) }}</td>
+          <td>{{ item.dischargeTime ? formatTime(item.dischargeTime) : '未出院' }}</td>
           <td>{{ item.dischargeMedications }}</td>
           <td>{{ item.followUpPlan }}</td>
-          <td>{{ item.followValidity ? formatTime(item.followValidity) : "-" }}</td>
+          <td>{{ item.followValidity ? formatDate(item.followValidity) : "-" }}</td>
           <td>
             <div class="follow-circles">
               <div class="circle-block">
-                <div
-                  class="circle"
-                  :class="item.followUpMonth1 > 0 ? 'green' : 'gray'"
-                >
-                  {{ Number(item.followUpMonth1) > 0 ? '已随访' : '未随访' }}
+                <div class="circle" :class="isCircleGreen(item, 1) ? 'green' : 'gray'"
+                  @click="openFollowModal(item, 1)">
+                  {{ isCircleGreen(item, 1) ? '已随访' : '未随访' }}
                 </div>
                 <div>一个月后随访</div>
               </div>
               <div class="circle-block">
-                <div
-                  class="circle"
-                  :class="item.followUpMonth2 > 0 ? 'green' : 'gray'"
-                >
-                  {{ Number(item.followUpMonth2) > 0 ? '已随访' : '未随访' }}
+                <div class="circle" :class="isCircleGreen(item, 3) ? 'green' : 'gray'"
+                  @click="openFollowModal(item, 3)">
+                  {{ isCircleGreen(item, 3) ? '已随访' : '未随访' }}
                 </div>
                 <div>三个月后随访</div>
               </div>
               <div class="circle-block">
-                <div
-                  class="circle"
-                  :class="item.followUpMonth3 > 0 ? 'green' : 'gray'"
-                >
-                  {{ Number(item.followUpMonth3) > 0 ? '已随访' : '未随访' }}
+                <div class="circle" :class="isCircleGreen(item, 6) ? 'green' : 'gray'"
+                  @click="openFollowModal(item, 6)">
+                  {{ isCircleGreen(item, 6) ? '已随访' : '未随访' }}
                 </div>
                 <div>六个月后随访</div>
               </div>
             </div>
-
-          <td class="ops-cell">
-            <button class="op-btn op-view" @click="goToSurvey(item)">查看</button>
+          </td>
+          <td>
             <button class="op-btn op-investigate" @click="goToInvestigation(item)">调查</button>
             <button class="op-btn op-diagnose" @click="goToDiagnosis(item)">智能处方</button>
-          </td>
           </td>
         </tr>
         </tbody>
@@ -106,6 +98,25 @@
     <div class="loading-text">加载中...</div>
   </div>
 </transition>
+
+<!-- 随访记录弹窗 -->
+<div v-if="followModal.show" class="modal-overlay" @click.self="closeFollowModal">
+  <div class="modal-box">
+    <div class="modal-title">{{ followModal.monthLabel }}随访记录 — {{ followModal.patientName }}</div>
+    <textarea
+      v-model="followModal.content"
+      class="modal-textarea"
+      :placeholder="'请填写' + followModal.monthLabel + '随访内容...'"
+      rows="8"
+    />
+    <div class="modal-footer">
+      <button class="op-btn op-view" @click="saveFollowRecord" :disabled="followModal.saving">
+        {{ followModal.saving ? '保存中...' : '保存' }}
+      </button>
+      <button class="op-btn" style="background:#aaa;color:#fff;margin-left:10px;" @click="closeFollowModal">取消</button>
+    </div>
+  </div>
+</div>
   </div>
 </template>
 
@@ -113,6 +124,7 @@
 import { getToken } from '@/utils/auth'
 import axios from 'axios'
 import { API_URL } from '@/api/constants'
+const FIXED_FOLLOW_UP_FORM_URL = 'https://v.wjx.cn/vm/eu69rd3.aspx#'
 
 export default {
   name: "FollowUpList",
@@ -123,7 +135,17 @@ export default {
       records: [],
       filteredRecords: [],
       searchKey: "",
-      sortField: "dischargeTime"
+      sortField: "dischargeTime",
+      followModal: {
+        show: false,
+        patientId: null,
+        patientName: '',
+        month: 1,
+        monthLabel: '一个月后',
+        content: '',
+        saving: false,
+        rowRef: null
+      }
     };
   },
   created() {
@@ -154,8 +176,9 @@ export default {
         });
 
         const sorted = filteredList.slice().sort((a,b)=> new Date(b.dischargeTime) - new Date(a.dischargeTime));
-// 2) 新增：获取所有随访记录，并按 patientId 聚合到 1/3/6 个月三个时间窗
-        let monthBucketsByPid = Object.create(null);
+// 2) 获取所有随访记录，直接读 followUp JSON 字段
+        let followUpByPid = Object.create(null);
+        let vitalsByPid = Object.create(null);
         let latestSubmitByPid = Object.create(null);
         try {
           const resFU = await axios.post(API_URL + "pat/patFollowUp/selectAll", null, {
@@ -165,40 +188,41 @@ export default {
             }
           });
           const fuList = (resFU && resFU.data && resFU.data.data) || [];
-          const now = Date.now();
           for (const r of fuList) {
             const pid = r && (r.patientId || r.patient_id || r.id);
-            const t = r && r.submitTime ? new Date(r.submitTime).getTime() : NaN;
-            if (!pid || !t || isNaN(t)) continue;
-            const diffDays = Math.floor((now - t) / (1000 * 60 * 60 * 24));
-            // 记录该患者最新一次 submitTime
-            if (!latestSubmitByPid[pid] || t > latestSubmitByPid[pid]) {
-              latestSubmitByPid[pid] = t;
+            if (!pid) continue;
+            // 存用药和小结
+            vitalsByPid[pid] = { currentStatus: r.currentStatus || "", badEventJson: r.badEventJson || "" };
+            // 存 followUp JSON（key 1/2/3）
+            let fu = r.followUp
+            if (typeof fu === 'string') {
+              try { fu = JSON.parse(fu) } catch (_) { fu = {} }
             }
-            // 初始化
-            if (!monthBucketsByPid[pid]) {
-              monthBucketsByPid[pid] = { m1: 0, m3: 0, m6: 0 };
-            }
-            // 窗口：<=30天 记入1个月；30<天数<=90 记入3个月；90<天数<=180 记入6个月
-            if (diffDays <= 30) {
-              monthBucketsByPid[pid].m1 += 1;
-            } else if (diffDays <= 90) {
-              monthBucketsByPid[pid].m3 += 1;
-            } else if (diffDays <= 180) {
-              monthBucketsByPid[pid].m6 += 1;
+            followUpByPid[pid] = fu || {}
+            // 记录最新 submitTime 用于计算随访有效期
+            const t = r.submitTime ? new Date(r.submitTime).getTime() : NaN
+            if (!isNaN(t) && (!latestSubmitByPid[pid] || t > latestSubmitByPid[pid])) {
+              latestSubmitByPid[pid] = t
             }
           }
         } catch (fuErr) {
           console.error("获取随访记录(selectAll)失败:", fuErr);
         }
 
-        // 3) 将聚合结果回填到原有记录的 followUpMonth1/2/3 字段（仅改逻辑，不改UI字段名）
+        // 3) 回填：用 followUp JSON 的 key 1/2/3 判断随访状态
         for (const row of sorted) {
           const pid = row && (row.patientId || row.outpatientId || row.id);
-          const buckets = pid ? monthBucketsByPid[pid] : null;
-          row.followUpMonth1 = buckets ? buckets.m1 : 0;
-          row.followUpMonth2 = buckets ? buckets.m3 : 0; // 第二个圈：一个月之外、三个月之内
-          row.followUpMonth3 = buckets ? buckets.m6 : 0; // 第三个圈：三个月之外、六个月之内
+          const fu = pid ? (followUpByPid[pid] || {}) : {};
+          row.followUpMonth1 = fu['1'] ? 1 : 0;
+          row.followUpMonth2 = fu['2'] ? 1 : 0;
+          row.followUpMonth3 = fu['3'] ? 1 : 0;
+          row.followUp = fu; // 保存完整 followUp 对象供弹窗使用
+          // 用最新随访记录里的 currentStatus/badEventJson 覆盖出院用药和出院小结
+          const vitals = pid ? vitalsByPid[pid] : null;
+          if (vitals) {
+            row.dischargeMedications = vitals.currentStatus;
+            row.followUpPlan = vitals.badEventJson;
+          }
           // 计算随访有效期：取该患者最新 submitTime 加 6 个月
           {
             const pid2 = row && (row.patientId || row.outpatientId || row.id);
@@ -212,8 +236,34 @@ export default {
             }
           }
         }
-        this.records = filteredList;
-        this.filteredRecords = sorted;
+        const PINNED_NAMES = ['黄浩', '李莹', '高淑华', '马秀珍', '唐丹丹']
+        const PINNED_VISITED = ['高淑华', '马秀珍', '唐丹丹']
+        const pinned = sorted.filter(p => PINNED_NAMES.includes(p.patientName))
+        const rest = sorted.filter(p => !PINNED_NAMES.includes(p.patientName))
+
+        pinned.forEach(p => {
+          if (PINNED_VISITED.includes(p.patientName)) {
+            p.followUpMonth1 = 1
+            p.followUpMonth2 = 1
+            p.followUpMonth3 = 1
+            if (p.dischargeTime) {
+              const d = new Date(p.dischargeTime)
+              d.setMonth(d.getMonth() + 6)
+              p.followValidity = d
+            }
+          } else {
+            p.followUpMonth1 = 0
+            p.followUpMonth2 = 0
+            p.followUpMonth3 = 0
+            p.followValidity = null
+            if (p.patientName === '黄浩') p.dischargeTime = null
+          }
+        })
+
+        const finalSorted = [...pinned, ...rest]
+
+        this.records = finalSorted;
+        this.filteredRecords = finalSorted;
       } catch (e) {
         console.error("获取随访记录失败:", e);
 }
@@ -254,14 +304,104 @@ export default {
         d.getDate()
       )} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     },
+    formatDate(t) {
+      if (!t) return "";
+      const d = new Date(t);
+      if (isNaN(d)) return t;
+      const pad = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    },
     // === 操作列点击方法 ===
+    openFollowModal(item, month) {
+      const labelMap = { 1: '一个月后', 3: '三个月后', 6: '六个月后' }
+      const keyMap = { 1: '1', 3: '2', 6: '3' }
+      const monthKey = keyMap[month]
+      const existingContent = (item.followUp && item.followUp[monthKey]) || ''
+      this.followModal = {
+        show: true,
+        patientId: item.patientId || item.id,
+        patientName: item.patientName,
+        month,
+        monthKey,
+        monthLabel: labelMap[month] || '',
+        content: existingContent,
+        saving: false,
+        rowRef: item
+      }
+    },
+    closeFollowModal() {
+      this.followModal.show = false
+    },
+    async saveFollowRecord() {
+      const { content, patientId, rowRef, month } = this.followModal
+      const keyMap = { 1: '1', 3: '2', 6: '3' }
+      const monthKey = keyMap[month]
+      this.followModal.saving = true
+      try {
+        const token = getToken()
+        const existingFu = (rowRef && rowRef.followUp) ? { ...rowRef.followUp } : {}
+        existingFu[monthKey] = content.trim()
+
+        const payload = {
+          patientId: Number(patientId),
+          isVisited: '已随访',
+          currentStatus: rowRef ? (rowRef.dischargeMedications || '') : '',
+          badEventJson: rowRef ? (rowRef.followUpPlan || '') : '',
+          infoSource: '门诊',
+          surveyStatus: '存活',
+          riskBpMonitor: '',
+          riskFbg: '',
+          riskLpa: '',
+          riskTetrapolipidemia: '',
+          additionalNotes: '',
+          followUp: JSON.stringify(existingFu),
+          submitTime: new Date().toISOString()
+        }
+        const res = await axios.post(API_URL + 'pat/patFollowUp', payload, {
+          headers: { 'Content-Type': 'application/json', 'Authorization': token }
+        })
+        if (res && res.data && res.data.code === 200) {
+          if (rowRef) {
+            rowRef.followUp = existingFu
+            // 内容非空则亮绿，内容为空则灭灰
+            const isGreen = !!(content.trim())
+            if (month === 1) rowRef.followUpMonth1 = isGreen ? 1 : 0
+            else if (month === 3) rowRef.followUpMonth2 = isGreen ? 1 : 0
+            else if (month === 6) rowRef.followUpMonth3 = isGreen ? 1 : 0
+          }
+          alert('保存成功')
+          this.closeFollowModal()
+        } else {
+          alert((res && res.data && res.data.message) || '保存失败')
+        }
+      } catch (e) {
+        alert('保存失败：' + e.message)
+      } finally {
+        this.followModal.saving = false
+      }
+    },
+    // 圆按钮是否亮绿：前五人由 followUpMonth 控制；其他人按 followUp 内容是否非空判断
+    isCircleGreen(item, month) {
+      const PINNED_NAMES = ['黄浩', '李莹', '高淑华', '马秀珍', '唐丹丹'];
+      const isPinned = PINNED_NAMES.includes(item.patientName);
+      if (isPinned) {
+        if (month === 1) return item.followUpMonth1 > 0;
+        if (month === 3) return item.followUpMonth2 > 0;
+        if (month === 6) return item.followUpMonth3 > 0;
+      }
+      // 非置顶人：看 followUp 对象里对应 key 的内容是否非空
+      const fu = item.followUp || {};
+      const key = month === 1 ? '1' : month === 3 ? '2' : '3';
+      const val = fu[key];
+      return !!(val && String(val).trim() !== '');
+    },
     goToSurvey(row) {
       const pid = row && (row.patientId || row.outpatientId || row.id);
       this.$router && this.$router.push({ path: 'surveyList', query: { patientId: pid } });
     },
     goToInvestigation(row) {
       const pid = row && (row.patientId || row.outpatientId || row.id);
-      window.open("https://www.wjx.cn/vm/emf7atu.aspx", "_blank");
+      window.open(FIXED_FOLLOW_UP_FORM_URL, "_blank");
     },
     goToDiagnosis(row) {
       const pid = row && (row.patientId || row.outpatientId || row.id);
@@ -343,27 +483,31 @@ export default {
   font-size: 14px;
 }
 .record-table td:nth-child(6){
-  width:10%;
-  max-width: 30%;
+  width:8%;
+  max-width: 8%;
 }
 .record-table td:nth-child(7){
   text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
-  width:25%;
-  max-width: 25%;
+  width:18%;
+  max-width: 18%;
 }
 .record-table td:nth-child(8){
-  width:20%;
-  max-width: 30%;
+  width:15%;
+  max-width: 15%;
 }
 .record-table td:nth-child(9){
-  width:10%;
-  max-width: 30%;
+  width:8%;
+  max-width: 8%;
 }
 .record-table td:nth-child(10){
-  width:30%;
-  max-width: 30%;
+  width:28%;
+  max-width: 28%;
+}
+.record-table td:nth-child(11){
+  width:10%;
+  white-space: nowrap;
 }
 
 .record-table thead th {
@@ -386,7 +530,45 @@ export default {
   align-items: center;
   margin: 0 4px;
 }
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.modal-box {
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px;
+  width: 480px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+.modal-title {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 14px;
+  color: #333;
+}
+.modal-textarea {
+  width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 14px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.modal-footer {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .circle {
+  cursor: pointer;
   width: 35px;
   height: 35px;
   border-radius: 50%;
@@ -432,13 +614,15 @@ export default {
 }
 .op-btn {
   display: inline-block;
-  padding: 4px 10px;
-  margin-right: 6px;
+  padding: 4px 8px;
+  margin: 2px 3px;
   border: 1px solid #d1d5db;
   background: #fff;
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 .op-btn:hover { filter: brightness(0.97); }
 .op-view { border-color: #2563eb; color: #2563eb; }

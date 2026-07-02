@@ -30,59 +30,55 @@
       </div>
     </div>
 
+    <div :class="patient.isWarning ? 'warning-card danger' : 'warning-card normal'">
+      <div class="warning-title">{{ patient.isWarning ? '当前预警' : '当前无预警' }}</div>
+      <div class="warning-content">
+        {{ patient.isWarning ? patient.warningReason : '未同时满足收缩压<90mmHg、胸痛持续>30分钟、心率>110次/分三项条件，未触发预警' }}
+      </div>
+    </div>
+
+
     <div class="record-section">
-      <div class="record-item">
-        <h4>主诉病史</h4>
+      <div v-for="record in recordGroups" :key="record.title" class="record-item">
+        <h4>{{ record.title }}</h4>
         <div class="divider" />
-        <p>{{ patient.complaint }}</p>
+        <p>{{ record.value || '无' }}</p>
       </div>
+    </div>
 
-      <div class="record-item">
-        <h4>体格检查</h4>
-        <div class="divider" />
-        <p>{{ patient.physicalExam }}</p>
+    <div class="upload-section">
+      <div class="section-title">拍照上传与报告附件</div>
+      <div class="upload-actions">
+        <label class="upload-btn">
+          上传检查照片/报告
+          <input type="file" accept="image/*,.pdf,.doc,.docx" multiple @change="handleAttachmentChange($event, '检查报告')">
+        </label>
+        <label class="upload-btn">
+          拍照上传
+          <input type="file" accept="image/*" capture="environment" multiple @change="handleAttachmentChange($event, '现场拍照')">
+        </label>
       </div>
-
-      <div class="record-item">
-        <h4>辅助检查</h4>
-        <div class="divider" />
-        <p>{{ patient.assistExam }}</p>
+      <div v-if="attachments.length" class="attachment-list">
+        <div v-for="(file, index) in attachments" :key="file.uid || index" class="attachment-item">
+          <img v-if="file.preview" :src="file.preview" alt="附件预览">
+          <div v-else class="file-icon">{{ getFileExt(file.name) }}</div>
+          <div class="attachment-meta">
+            <strong>{{ file.name }}</strong>
+            <span>{{ file.type }} · {{ file.status }}</span>
+            <small v-if="file.url">{{ file.url }}</small>
+            <div class="attachment-actions">
+              <button v-if="file.url" class="mini-btn" @click="openAttachment(file)">查看</button>
+              <button class="mini-btn danger" @click="removeAttachment(index)">删除</button>
+            </div>
+          </div>
+        </div>
       </div>
-
-      <div class="record-item">
-        <h4>诊断结果</h4>
-        <div class="divider" />
-        <p>{{ patient.diagnosis }}</p>
-      </div>
-
-      <div class="record-item">
-        <h4>治疗方案</h4>
-        <div class="divider" />
-        <p>{{ patient.treatment }}</p>
-      </div>
-
-      <div class="record-item">
-        <h4>用药记录</h4>
-        <div class="divider" />
-        <p>{{ patient.medication }}</p>
-      </div>
-
-      <div class="record-item">
-        <h4>手术记录</h4>
-        <div class="divider" />
-        <p>{{ patient.surgery }}</p>
-      </div>
-
-      <div class="record-item">
-        <h4>护理记录</h4>
-        <div class="divider" />
-        <p>{{ patient.nursing }}</p>
-      </div>
-
-      <div class="record-item">
-        <h4>随访记录</h4>
-        <div class="divider" />
-        <p>{{ patient.followUp }}</p>
+      <div v-else class="empty-upload">暂无上传附件</div>
+      <div class="save-actions">
+        <button class="save-btn" :disabled="savingAttachments || !hasPendingAttachments" @click="saveAllAttachments">
+          {{ savingAttachments ? '保存中...' : '确定保存附件' }}
+        </button>
+        <span class="save-tip">上传后先进入待保存列表，确认无误后点击保存；未保存前可直接删除。</span>
       </div>
     </div>
 
@@ -143,6 +139,7 @@
 import { getToken } from '@/utils/auth'
 import axios from 'axios'
 import { API_URL } from '@/api/constants'
+import { buildVitalsWarning } from '@/utils/vitalsWarning'
 
 // [CACHE-BEGIN] 患者列表简单缓存（10分钟）
 const PAT_LIST_CACHE_KEY = 'PAT_FRONT_LIST_CACHE_V1';
@@ -186,36 +183,100 @@ export default {
   data() {
     return {
       switchDialog: { visible:false, loading:false, error:'', keyword:'', rawList:[], filtered:[], selectedId:null },
+      attachments: [],
+      savingAttachments: false,
       patient: {
-        id: '2',
-        name: '张勇',
-        admissionTime: '2025-04-01 12:30',
-        dischargeTime: '未出院',
-        doctor: '李智兴',
-        complaint: '胸痛、气短',
-        physicalExam: '心率正常，血压稳定。',
-        assistExam: '心电图正常，CT显示无异常。',
-        diagnosis: '心脏病',
-        treatment: '建议住院观察，控制心率。',
-        medication: '阿莫西林，一天三次。',
-        surgery: '无',
-        nursing: '定期监测生命体征。',
-        followUp: '一周后复查。'
+        id: null,
+        name: '',
+        admissionTime: '',
+        dischargeTime: '',
+        doctor: '',
+        complaint: '',
+        physicalExam: '',
+        assistExam: '',
+        diagnosis: '',
+        treatment: '',
+        medication: '',
+        surgery: '',
+        nursing: '',
+        followUp: '',
+        isWarning: false,
+        warningReason: ''
       }
     }
   },
+  computed: {
+    hasPendingAttachments() {
+      return this.attachments.some(item => item && item.uploaded && !item.saved)
+    },
+    recordGroups() {
+      const all = [
+        { title: '主诉病史', value: this.patient.complaint },
+        { title: '体格检查', value: this.patient.physicalExam },
+        { title: '辅助检查', value: this.patient.assistExam },
+        { title: '诊断结果', value: this.patient.diagnosis },
+        { title: '治疗方案', value: this.patient.treatment },
+        { title: '用药记录', value: this.patient.medication },
+        { title: '手术记录', value: this.patient.surgery },
+        { title: '护理记录', value: this.patient.nursing },
+        { title: '随访记录', value: this.patient.followUp }
+      ]
+      return all.filter(item => item.value && item.value.trim() !== '' && item.value.trim() !== '无')
+    }
+  },
   created() {
-    try {
-      const eff = this.getEffectivePatientId && this.getEffectivePatientId();
-      if (eff) this.syncIdToAll(eff);
-    } catch (_) {}
-    try {
-      if (this.patient && this.patient.id && typeof this.getPatientData === 'function') {
-        this.getPatientData();
-      }
-    } catch (_) {}
+    this.initErecordPage()
+  },
+  activated() {
+    // keep-alive / 标签页切回来时重新拉取附件
+    this.initErecordPage()
+  },
+  watch: {
+    '$route.query.id'() {
+      this.initErecordPage()
+    },
+    '$route.query.patientId'() {
+      this.initErecordPage()
+    }
   },
   methods: {
+    async initErecordPage() {
+      // 切换页面时先清空，不显示旧数据/缓存，等接口返回再渲染
+      this.patient = {
+        id: null,
+        name: '',
+        admissionTime: '',
+        dischargeTime: '',
+        doctor: '',
+        complaint: '',
+        physicalExam: '',
+        assistExam: '',
+        diagnosis: '',
+        treatment: '',
+        medication: '',
+        surgery: '',
+        nursing: '',
+        followUp: '',
+        isWarning: false,
+        warningReason: ''
+      }
+      try {
+        const eff = this.getEffectivePatientId && this.getEffectivePatientId()
+        if (eff) this.syncIdToAll(eff)
+      } catch (_) {}
+      try {
+        if (this.patient && this.patient.id && typeof this.getPatientData === 'function') {
+          await this.getPatientData()
+        }
+      } catch (e) {
+        console.error('电子病历基础信息加载失败：', e)
+      }
+      try {
+        await this.loadSavedAttachments()
+      } catch (e) {
+        console.error('电子病历附件加载失败：', e)
+      }
+    },
     formatDoctors(doctors) {
       if (!doctors || !Array.isArray(doctors) || doctors.length === 0) {
         return ''
@@ -375,45 +436,88 @@ export default {
     },
     closeSwitchDialog() { this.switchDialog.visible = false; },
     applyFilter() {
+      const PINNED_NAMES = ['黄浩', '李莹', '高淑华', '马秀珍', '唐丹丹'];
       const kw = (this.switchDialog.keyword || '').toLowerCase();
-      if (!kw) { this.switchDialog.filtered = this.switchDialog.rawList.slice(0, 2000); return; }
-      this.switchDialog.filtered = this.switchDialog.rawList.filter(p => {
-        const name = (p.patientName || '').toLowerCase();
-        const opId = (p.outpatientId || '').toLowerCase();
-        return name.includes(kw) || opId.includes(kw);
-      });
+      const source = kw
+        ? this.switchDialog.rawList.filter(p => {
+            const name = (p.patientName || '').toLowerCase();
+            const opId = (p.outpatientId || '').toLowerCase();
+            return name.includes(kw) || opId.includes(kw);
+          })
+        : this.switchDialog.rawList.slice(0, 2000);
+
+      // 五人按 PINNED_NAMES 顺序置顶，其余按 onsetTime 从近到远排序
+      const pinned = PINNED_NAMES
+        .map(name => source.find(p => p.patientName === name))
+        .filter(Boolean);
+      const rest = source
+        .filter(p => !PINNED_NAMES.includes(p.patientName))
+        .sort((a, b) => {
+          const ta = a.onsetTime ? new Date(a.onsetTime).getTime() : 0;
+          const tb = b.onsetTime ? new Date(b.onsetTime).getTime() : 0;
+          return tb - ta;
+        });
+      this.switchDialog.filtered = [...pinned, ...rest];
     },
     async fetchAllPatients() {
       this.switchDialog.loading = true;
       this.switchDialog.error = "";
       try {
-        // 先尝试缓存命中（命中就直接渲染并返回）
-        const _cached = _readPatListCache();
-        if (_cached && _cached.length) {
-          this.switchDialog.rawList = _cached;
-          this.switchDialog.filtered = _cached.slice(0, 2000);
-          this.switchDialog.loading = false;
-          this.switchDialog.error = "";
-          return;
+        const token = getToken && getToken() || this.token;
+        this.token = token;
+        const headers = { 'Content-Type': 'application/json', 'Authorization': token };
+        const axiosPost = this.$axios && this.$axios.post ? this.$axios.post.bind(this.$axios) : axios.post;
+
+        // 同时拉两个接口
+        const [res1, res2] = await Promise.allSettled([
+          axiosPost(API_URL + 'pat/frontPatInfo', null, { params: {}, headers }),
+          axiosPost(API_URL + 'pat/patFollowInfo', null, { headers })
+        ]);
+
+        const list1 = (res1.status === 'fulfilled' && res1.value?.data?.code === 200)
+          ? (Array.isArray(res1.value.data.data) ? res1.value.data.data : [])
+          : [];
+
+        const list2 = (res2.status === 'fulfilled' && res2.value?.data?.code === 200)
+          ? (Array.isArray(res2.value.data.data) ? res2.value.data.data : [])
+          : [];
+
+        // 用 patientName 做最终去重，确保有名字的人不会被 id 冲突覆盖
+        const byName = new Map();
+
+        // frontPatInfo 先入（过滤掉没有名字的）
+        for (const p of list1) {
+          const name = (p && p.patientName || '').trim();
+          if (name) byName.set(name, p);
         }
 
-        this.token = getToken && getToken() || this.token;
-        const response = await (this.$axios && this.$axios.post ? this.$axios.post : axios.post)(API_URL + 'pat/frontPatInfo', null, {
-          // 如果接口需要分页或其它参数，可在此补充 params
-          params: { },
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': this.token
+        // patFollowInfo 补充：名字不在 map 里才加入
+        for (const p of list2) {
+          const name = (p && p.patientName || '').trim();
+          if (!name) continue;
+          if (!byName.has(name)) {
+            byName.set(name, {
+              id: p.id || p.patientId,
+              patientName: name,
+              outpatientId: p.outpatientId,
+              gender: p.gender,
+              age: p.age,
+              onsetTime: p.onsetTime,
+              firstMedicalTime: p.firstMedicalTime,
+              dischargeTime: p.dischargeTime,
+              diagnosis: p.diagnosis,
+              doctors: p.doctors || []
+            });
           }
-        });
-        // 统一按你项目的接口规范解析
-        if (response && response.data && response.data.code === 200) {
-          const list = Array.isArray(response.data.data) ? response.data.data : [];
-          this.switchDialog.rawList = list;
-          _writePatListCache && _writePatListCache(list);
+        }
+
+        const list = Array.from(byName.values());
+        this.switchDialog.rawList = list;
+
+        if (!list.length) {
+          this.switchDialog.error = '暂无患者数据';
         } else {
-          this.switchDialog.error = (response && response.data && (response.data.msg || response.data.message)) || '加载失败';
-          this.switchDialog.rawList = [];
+          _writePatListCache && _writePatListCache(list);
         }
       } catch (e) {
         this.switchDialog.error = (e && e.message) || '加载失败';
@@ -432,6 +536,268 @@ export default {
         window.location.reload();
       } finally {
         this.closeSwitchDialog();
+      }
+    },
+
+    applyWarningInfo(source) {
+      const warning = buildVitalsWarning(source || {})
+      this.patient.isWarning = warning.isWarning
+      this.patient.warningReason = warning.warningReason
+    },
+    applyWarningFromCache(id) {
+      try {
+        const raw = sessionStorage.getItem('filteredPatients')
+        if (!raw) return false
+        const list = JSON.parse(raw)
+        const matched = Array.isArray(list) ? list.find(p => String(p.id) === String(id)) : null
+        if (!matched) return false
+        this.applyWarningInfo(matched)
+        return true
+      } catch (e) {
+        return false
+      }
+    },
+    getFileExt(name) {
+      const n = String(name || '')
+      const ext = n.includes('.') ? n.split('.').pop().toUpperCase() : 'FILE'
+      return ext.length > 5 ? 'FILE' : ext
+    },
+    openAttachment(file) {
+      const url = file && file.url
+      if (!url) return
+      window.open(url, '_blank')
+    },
+    removeAttachment(index) {
+      const item = this.attachments[index]
+      const msg = item && item.saved
+        ? '该附件已经保存到数据库。当前后端没有提供删除接口，只能先从页面列表移除；如需数据库也删除，需要后端增加 /pic/recordPicUrl/delete 接口。确定移除显示吗？'
+        : '确定删除这个待保存附件吗？'
+      if (!window.confirm(msg)) return
+      try {
+        if (item && item.preview && item.preview.indexOf('blob:') === 0) URL.revokeObjectURL(item.preview)
+      } catch (_) {}
+      this.attachments.splice(index, 1)
+    },
+    async handleAttachmentChange(event, type) {
+      const files = Array.from(event.target.files || [])
+      event.target.value = ''
+      for (const rawFile of files) {
+        const item = {
+          uid: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+          name: rawFile.name,
+          type,
+          status: '待上传',
+          url: '',
+          filePath: '',
+          preview: rawFile.type && rawFile.type.startsWith('image/') ? URL.createObjectURL(rawFile) : '',
+          uploaded: false,
+          saved: false,
+          rawFile
+        }
+        this.attachments.unshift(item)
+        await this.uploadAttachment(rawFile, item)
+      }
+    },
+    getApiHeaders(contentType) {
+      const token = getToken()
+      const headers = {
+        'Authorization': token
+      }
+      if (contentType) headers['Content-Type'] = contentType
+      return headers
+    },
+    normalizeApiData(res) {
+      const body = res && res.data ? res.data : {}
+      if (body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'data')) {
+        return body.data
+      }
+      return body
+    },
+    extractUploadedFileInfo(res) {
+      const data = this.normalizeApiData(res)
+      const info = Array.isArray(data) ? data[0] : data
+      if (typeof info === 'string') {
+        return { url: info, filePath: info }
+      }
+      if (!info || typeof info !== 'object') {
+        return { url: '', filePath: '' }
+      }
+      const url = info.url || info.fileUrl || info.fileURL || info.path || info.filePath || info.filepath || info.data || ''
+      const filePath = info.filePath || info.filepath || info.path || info.url || info.fileUrl || ''
+      return { url, filePath }
+    },
+    buildRecordPicPayload(rawFile, item, uploaded) {
+      const patientId = this.getEffectivePatientId ? this.getEffectivePatientId() : this.patient.id
+      const filePath = (uploaded && (uploaded.filePath || uploaded.url)) || item.filePath || item.url || ''
+      const fileUrl = (uploaded && (uploaded.url || uploaded.filePath)) || item.url || item.filePath || ''
+      return {
+        id: patientId,
+        patientId,
+        patId: patientId,
+        filePath,
+        filepath: filePath,
+        path: filePath,
+        fileUrl,
+        url: fileUrl,
+        recordType: item.type,
+        type: item.type,
+        fileName: rawFile && rawFile.name ? rawFile.name : item.name,
+        name: item.name
+      }
+    },
+    isApiSuccess(res) {
+      const body = res && res.data ? res.data : {}
+      return body.code === undefined || body.code === 200 || body.code === '200'
+    },
+    async uploadAttachment(rawFile, item) {
+      const formData = new FormData()
+      formData.append('file', rawFile)
+      item.status = '上传中'
+      try {
+        const uploadRes = await axios.post(API_URL + 'pic/recordPicUrl/upload', formData, {
+          headers: this.getApiHeaders('multipart/form-data')
+        })
+        if (!this.isApiSuccess(uploadRes)) {
+          throw new Error((uploadRes.data && (uploadRes.data.message || uploadRes.data.msg)) || '上传失败')
+        }
+        const uploaded = this.extractUploadedFileInfo(uploadRes)
+        if (!uploaded.filePath && !uploaded.url) {
+          throw new Error('上传成功但后端未返回文件路径')
+        }
+        item.url = uploaded.url || uploaded.filePath
+        item.filePath = uploaded.filePath || uploaded.url
+        item.uploaded = true
+        item.saved = false
+        item.status = '已上传，待保存'
+      } catch (e) {
+        console.error('电子病历附件上传失败：', e)
+        item.status = '上传失败，请查看控制台/Network响应'
+      }
+    },
+    async saveRecordAttachment(payload) {
+      const url = API_URL + 'pic/recordPicUrl/add'
+      const headers = this.getApiHeaders('application/json')
+      try {
+        const res = await axios.post(url, null, { params: payload, headers })
+        if (this.isApiSuccess(res)) return res
+        throw new Error((res.data && (res.data.message || res.data.msg)) || '保存附件失败')
+      } catch (firstError) {
+        const res = await axios.post(url, payload, { headers })
+        if (this.isApiSuccess(res)) return res
+        throw new Error((res.data && (res.data.message || res.data.msg)) || '保存附件失败')
+      }
+    },
+    async saveAllAttachments() {
+      const pending = this.attachments.filter(item => item && item.uploaded && !item.saved)
+      if (!pending.length) return
+      this.savingAttachments = true
+      try {
+        for (const item of pending) {
+          item.status = '保存中'
+          const payload = this.buildRecordPicPayload(null, item, { url: item.url, filePath: item.filePath })
+          await this.saveRecordAttachment(payload)
+          item.saved = true
+          item.status = '已保存'
+        }
+        this.cacheSavedAttachmentsLocally()
+        alert('附件已保存到数据库')
+        await this.loadSavedAttachments()
+      } catch (e) {
+        console.error('电子病历附件保存失败：', e)
+        alert('附件保存失败，请查看控制台/Network响应')
+      } finally {
+        this.savingAttachments = false
+      }
+    },
+    parseSavedAttachmentList(data) {
+      let list = data
+      if (list && typeof list === 'object' && !Array.isArray(list)) {
+        list = list.records || list.list || list.rows || list.data || list.result || []
+      }
+      if (!Array.isArray(list)) return []
+      // 调试：打印第一条原始数据，确认后端字段名
+      if (list.length) console.log('[erecord] 附件原始数据第一条：', JSON.stringify(list[0]))
+      return list.map((it, idx) => {
+        // 尽可能兼容各种后端字段名
+        const url = it.url || it.fileUrl || it.fileURL || it.path || it.filePath
+          || it.filepath || it.recordPicUrl || it.picUrl || it.imageUrl
+          || it.imgUrl || it.src || it.link || ''
+        const filePath = it.filePath || it.filepath || it.path || it.fileUrl
+          || it.fileURL || it.recordPicUrl || it.picUrl || url || ''
+        const name = it.fileName || it.name || it.filename
+          || (url ? String(url).split('/').pop() : `附件${idx + 1}`)
+        const type = it.recordType || it.type || '检查报告'
+        return {
+          uid: it.id || `${Date.now()}_saved_${idx}`,
+          name,
+          type,
+          status: '已保存',
+          url,
+          filePath,
+          preview: /\.(png|jpe?g|gif|bmp|webp)$/i.test(url) ? url : '',
+          uploaded: true,
+          saved: true,
+          raw: it
+        }
+      }).filter(item => item.url || item.filePath)
+    },
+
+    getAttachmentCacheKey() {
+      const patientId = this.getEffectivePatientId ? this.getEffectivePatientId() : this.patient.id
+      return `erecord_record_attachments_${patientId || 'unknown'}`
+    },
+    cacheSavedAttachmentsLocally() {
+      try {
+        const saved = this.attachments.filter(item => item && item.saved)
+        localStorage.setItem(this.getAttachmentCacheKey(), JSON.stringify(saved))
+      } catch (_) {}
+    },
+    readLocalSavedAttachments() {
+      try {
+        const raw = localStorage.getItem(this.getAttachmentCacheKey())
+        if (!raw) return []
+        const list = JSON.parse(raw)
+        return Array.isArray(list) ? list : []
+      } catch (_) {
+        return []
+      }
+    },
+    mergeAttachmentLists(pending, savedList, localList) {
+      const map = new Map()
+      const put = (item) => {
+        if (!item) return
+        const key = item.filePath || item.url || item.uid || item.name
+        if (!key) return
+        map.set(String(key), item)
+      }
+      ;(localList || []).forEach(put)
+      ;(savedList || []).forEach(put)
+      ;(pending || []).forEach(put)
+      return Array.from(map.values())
+    },
+    async loadSavedAttachments() {
+      const patientId = this.getEffectivePatientId ? this.getEffectivePatientId() : this.patient.id
+      if (!patientId) return
+      const pending = this.attachments.filter(item => item && !item.saved)
+      const localList = this.readLocalSavedAttachments()
+      try {
+        const res = await axios.post(API_URL + 'pic/recordPicUrl', null, {
+          params: { id: patientId, patientId, patId: patientId },
+          headers: this.getApiHeaders('application/json')
+        })
+        if (!this.isApiSuccess(res)) {
+          this.attachments = this.mergeAttachmentLists(pending, [], localList)
+          return
+        }
+        const rawData = this.normalizeApiData(res)
+        console.log('[erecord] pic/recordPicUrl 返回 data：', JSON.stringify(rawData))
+        const savedList = this.parseSavedAttachmentList(rawData)
+        console.log('[erecord] 解析出附件数量：', savedList.length)
+        this.attachments = this.mergeAttachmentLists(pending, savedList, localList)
+        if (savedList.length) this.cacheSavedAttachmentsLocally()
+      } catch (e) {
+        console.error('读取电子病历已保存附件失败：', e)
+        this.attachments = this.mergeAttachmentLists(pending, [], localList)
       }
     },
 
@@ -469,9 +835,34 @@ export default {
           const dischargeDate = new Date(String(dischargeTime).replace(/\//g, '-'))
           dischargeDisplay = dischargeDate > now ? '住院中' : dischargeTime
         }
-        this.patient.dischargeTime = dischargeDisplay // 更新出院时间
-        this.patient.name = patientName // 更新患者姓名
-        this.patient.doctor = userName // 更新医生信息
+        this.patient.dischargeTime = dischargeDisplay
+        this.patient.name = patientName
+        this.patient.doctor = userName
+
+        // 预警判断：从 Vuex store 读取患者生命体征，没有再调 frontPatInfo
+        try {
+          let vitalsSource = null
+          const storeList = this.$store.getters.patientList
+          if (storeList && storeList.length > 0) {
+            vitalsSource = storeList.find(p => String(p.id) === String(id)) || null
+          }
+          if (!vitalsSource) {
+            const viRes = await axios.post(API_URL + 'pat/frontPatInfo', null, {
+              headers: { 'Content-Type': 'application/json', 'Authorization': token }
+            })
+            if (viRes.data.code === 200 && Array.isArray(viRes.data.data)) {
+              this.$store.dispatch('user/setPatientList', viRes.data.data)
+              vitalsSource = viRes.data.data.find(p => String(p.id) === String(id)) || null
+            }
+          }
+          if (vitalsSource) {
+            const warning = buildVitalsWarning(vitalsSource)
+            this.patient.isWarning = warning.isWarning
+            this.patient.warningReason = warning.warningReason
+          }
+        } catch (e) {
+          console.error('预警生命体征读取失败：', e)
+        }
 
         console.log(this.patient)
       } else {
@@ -494,8 +885,6 @@ export default {
 
 
         this.patient.complaint = patient.chiefComplaint
-        this.patient.physicalExam = '无'
-        // this.patient.assistExam =  '无'
         this.patient.diagnosis = patient.dischargeDiagnosis
         this.patient.treatment = patient.treatmentPlan
         this.patient.medication = patient.dischargeMedications
@@ -549,6 +938,74 @@ export default {
   margin: 0 10px; /* 左右间距 */
 }
 
+.warning-row {
+  background: #fff5f5;
+  border-left: 3px solid #f00;
+  padding-left: 6px;
+  border-radius: 3px;
+}
+
+.warning-card {
+  background: #fff;
+  border-radius: 5px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border-left: 5px solid #67c23a;
+}
+
+.warning-card.danger {
+  border-left-color: #f56c6c;
+  background: #fff5f5;
+}
+
+.warning-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.warning-content {
+  color: #333;
+}
+
+.report-section,
+.upload-section {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.section-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.report-field {
+  border: 1px solid #ebeef5;
+  border-radius: 5px;
+  padding: 10px;
+  background: #fafafa;
+}
+
+.report-field span {
+  display: block;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.report-field strong {
+  color: #222;
+  word-break: break-all;
+}
+
 .record-section {
   display: flex;
   flex-direction: column; /* 垂直排列 */
@@ -571,6 +1028,124 @@ export default {
   height: 1px;
   background-color: #ddd;
   margin: 5px 0; /* 上下间距 */
+}
+
+.upload-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.upload-btn {
+  display: inline-block;
+  padding: 8px 14px;
+  color: #fff;
+  background: #409eff;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.upload-btn input {
+  display: none;
+}
+
+.attachment-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.attachment-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 5px;
+  background: #fafafa;
+}
+
+.attachment-item img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.attachment-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.attachment-meta small {
+  color: #666;
+  word-break: break-all;
+}
+
+.file-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  background: #f0f2f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #666;
+  flex-shrink: 0;
+}
+
+.attachment-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.mini-btn {
+  padding: 3px 8px;
+  border: 1px solid #409eff;
+  color: #409eff;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mini-btn.danger {
+  border-color: #f56c6c;
+  color: #f56c6c;
+}
+
+.save-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.save-btn {
+  padding: 8px 18px;
+  color: #fff;
+  background: #67c23a;
+  border: 1px solid #67c23a;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.save-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.save-tip {
+  color: #888;
+  font-size: 13px;
+}
+
+.empty-upload {
+  color: #999;
 }
 
 /* 切换按钮：与第一页面一致，放“主治医生”右侧，适中大小 */
